@@ -107,10 +107,13 @@ export default function GMPage() {
     const archR = await fetch('/api/game/archive');
     if (archR.ok) { const d = await archR.json(); setArchive(d.archive ?? []); }
 
-    // Load prev PK
-    const pkR = await fetch(`/api/turns/${(await stateR.clone().json().catch(() => ({ currentYear: 2032 }))).currentYear - 1 || year - 1}/perfect-knowledge`, { headers: headers() });
-    if (pkR.ok) { const d = await pkR.json(); setPrevPK(d.perfectKnowledge ?? ''); }
-  }, [authed, headers, year]);
+    // Load prev PK using the year extracted above (stateR body already consumed — cannot clone)
+    if (stateR.ok) {
+      const currentYear = (await fetch('/api/game/state').then(r => r.json()).catch(() => ({ currentYear: 2032 }))).currentYear ?? 2032;
+      const pkR = await fetch(`/api/turns/${currentYear - 1}/perfect-knowledge`, { headers: headers() });
+      if (pkR.ok) { const d = await pkR.json(); setPrevPK(d.perfectKnowledge ?? ''); }
+    }
+  }, [authed, headers]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
@@ -601,8 +604,29 @@ export default function GMPage() {
         {tab === 'processing' && (
           <div className="space-y-4">
             <div className="card space-y-4">
-              <p className="label">Previous Perfect Knowledge Document</p>
-              <p className="text-xs" style={{ color: 'var(--text2)' }}>Pre-populated from the database (Year {year - 1}). Edit if needed before processing.</p>
+              <div className="flex items-center justify-between">
+                <p className="label">Previous Perfect Knowledge Document</p>
+                <button
+                  className="btn-ghost text-xs"
+                  onClick={async () => {
+                    const r = await fetch(`/api/turns/${year - 1}/perfect-knowledge`, { headers: headers() });
+                    if (r.ok) { const d = await r.json(); setPrevPK(d.perfectKnowledge ?? ''); }
+                  }}
+                >
+                  ↺ Reset to Year {year - 1}
+                </button>
+              </div>
+              <p className="text-xs" style={{ color: 'var(--text2)' }}>
+                Should contain <strong>only last turn&apos;s PK</strong> (Year {year - 1}). Do not paste multiple years — it bloats the context and breaks the AI.
+              </p>
+              {prevPK.length > 30000 && (
+                <p className="text-sm font-semibold" style={{ color: 'var(--danger)' }}>
+                  ⚠️ PK is {Math.round(prevPK.length / 1000)}k characters — this is too long. It likely contains multiple years concatenated. Click &quot;Reset to Year {year - 1}&quot; above to fix this.
+                </p>
+              )}
+              <p className="text-xs" style={{ color: prevPK.length > 30000 ? 'var(--danger)' : 'var(--text2)' }}>
+                {prevPK.length.toLocaleString()} characters
+              </p>
               <textarea
                 className="input font-mono text-xs"
                 style={{ minHeight: 300 }}
