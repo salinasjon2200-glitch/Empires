@@ -1,6 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 import { dbGet } from '@/lib/db';
 import { getSession, extractToken, extractGMToken } from '@/lib/auth';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest, { params }: { params: { year: string; player: string } }) {
   const year = parseInt(params.year);

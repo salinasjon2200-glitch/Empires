@@ -1,7 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 import { dbGet, dbSet } from '@/lib/db';
 import { extractGMToken } from '@/lib/auth';
 import { GameState } from '@/lib/types';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
   const state = await dbGet<GameState>('game:state') ?? {

@@ -1,7 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 import { dbGet, dbKeys } from '@/lib/db';
 import { extractGMToken } from '@/lib/auth';
 import { ChatMessage, Group } from '@/lib/types';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   if (!extractGMToken(req)) return NextResponse.json({ error: 'GM auth required' }, { status: 401 });

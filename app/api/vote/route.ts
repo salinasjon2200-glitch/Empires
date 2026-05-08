@@ -1,7 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 import { dbGet, dbSet } from '@/lib/db';
 import { verifyGMPassword } from '@/lib/auth';
 import { ThemeVote, GameState } from '@/lib/types';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
   const votes = await dbGet<ThemeVote>('vote:theme') ?? {};

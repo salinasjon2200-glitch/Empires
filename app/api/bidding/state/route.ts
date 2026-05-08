@@ -1,6 +1,8 @@
-import { NextResponse } from 'next/server';
+﻿import { NextResponse } from 'next/server';
 import { dbGet } from '@/lib/db';
 import { BidState, GameState, PlayerPoints } from '@/lib/types';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
   const [bids, state, points] = await Promise.all([

@@ -1,9 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 import { dbGet, dbSet } from '@/lib/db';
 import { getSession, extractToken, extractGMToken } from '@/lib/auth';
 import { GameState, Player } from '@/lib/types';
 
-// GET — GM views all submitted actions
+export const dynamic = 'force-dynamic';
+
+// GET â€” GM views all submitted actions
 export async function GET(req: NextRequest) {
   if (!extractGMToken(req)) return NextResponse.json({ error: 'GM auth required' }, { status: 401 });
   const state = await dbGet<GameState>('game:state');
@@ -12,7 +14,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ actions, year });
 }
 
-// POST — player submits action for current turn
+// POST â€” player submits action for current turn
 export async function POST(req: NextRequest) {
   const token = extractToken(req);
   if (!token) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });

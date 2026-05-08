@@ -1,7 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 import { dbGet, dbSet } from '@/lib/db';
 import { extractGMToken } from '@/lib/auth';
 import { GameState, TurnCodes } from '@/lib/types';
+
+export const dynamic = 'force-dynamic';
 
 function randomCode(prefix: string): string {
   const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
@@ -10,7 +12,7 @@ function randomCode(prefix: string): string {
   return s;
 }
 
-// GET — list all codes for current turn (GM only)
+// GET â€” list all codes for current turn (GM only)
 export async function GET(req: NextRequest) {
   if (!extractGMToken(req)) return NextResponse.json({ error: 'GM auth required' }, { status: 401 });
   const state = await dbGet<GameState>('game:state');
@@ -19,7 +21,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ codes, year });
 }
 
-// POST — add / reset codes (GM only)
+// POST â€” add / reset codes (GM only)
 export async function POST(req: NextRequest) {
   if (!extractGMToken(req)) return NextResponse.json({ error: 'GM auth required' }, { status: 401 });
 

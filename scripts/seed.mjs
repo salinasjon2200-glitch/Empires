@@ -2,7 +2,8 @@
  * Seed script — populates the 2031 end-of-game state so Turn 7 (2032) can begin.
  * Run with: node scripts/seed.mjs
  *
- * Uses JSON file storage (no KV needed for dev).
+ * Writes to Upstash KV if KV_REST_API_URL + KV_REST_API_TOKEN are set in .env.local,
+ * otherwise falls back to local JSON files in /data.
  */
 
 import fs from 'fs';
@@ -13,17 +14,42 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, '..', 'data');
 
+// Load .env.local manually
+const envPath = path.join(__dirname, '..', '.env.local');
+if (fs.existsSync(envPath)) {
+  for (const line of fs.readFileSync(envPath, 'utf-8').split('\n')) {
+    const m = line.match(/^([^#=\s][^=]*)=(.*)$/);
+    if (m) process.env[m[1].trim()] = m[2].trim();
+  }
+}
+
+const KV_URL = process.env.KV_REST_API_URL;
+const KV_TOKEN = process.env.KV_REST_API_TOKEN;
+const useKV = !!(KV_URL && KV_TOKEN);
+
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
 function safeKey(key) {
-  // Replace chars not safe for Windows filenames
   return key.replace(/[^a-zA-Z0-9_\-]/g, '_');
 }
 
-function write(key, value) {
-  const fp = path.join(DATA_DIR, safeKey(key) + '.json');
-  fs.writeFileSync(fp, JSON.stringify(value, null, 2), 'utf-8');
-  console.log(`  ✓ ${key}`);
+async function write(key, value) {
+  if (useKV) {
+    const res = await fetch(`${KV_URL}/pipeline`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${KV_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify([['SET', key, JSON.stringify(value)]]),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`KV write failed for "${key}": ${res.status} ${text}`);
+    }
+    console.log(`  ✓ ${key} → Upstash`);
+  } else {
+    const fp = path.join(DATA_DIR, safeKey(key) + '.json');
+    fs.writeFileSync(fp, JSON.stringify(value, null, 2), 'utf-8');
+    console.log(`  ✓ ${key} → local file`);
+  }
 }
 
 // Simple SHA-256 hash for seed passwords (bcrypt adds startup overhead)
@@ -33,9 +59,12 @@ function hashPw(pw) {
 }
 
 console.log('\n🌍 EMPIRES — Seeding 2031 game state\n');
+console.log(useKV ? '  📡 Writing to Upstash KV\n' : '  📁 Writing to local files\n');
+
+async function seed() {
 
 // ─── GAME STATE ──────────────────────────────────────────────────────────────
-write('game:state', {
+await write('game:state', {
   phase: 2,
   currentYear: 2032,
   theme: 'dark-military',
@@ -71,7 +100,7 @@ const players = [
   { name: 'Bus Michael', empire: 'Wall of Pongs',           color: '#6b7280', status: 'eliminated', eliminatedYear: 2026, territories: [], passwordHash: hashPw('PONGS-ELIMINATED') },
 ];
 
-write('game:players', players);
+await write('game:players', players);
 
 // ─── TERRITORY MAP ────────────────────────────────────────────────────────────
 const territories = {
@@ -166,11 +195,11 @@ const territories = {
   'Russia (West)':     { empire: 'Ungoverned',  leader: '', color: '#374151', status: 'ungoverned' },
 };
 
-write('map:territories', territories);
-write('map:history:2031', territories);
+await write('map:territories', territories);
+await write('map:history:2031', territories);
 
 // ─── TURN ARCHIVE ─────────────────────────────────────────────────────────────
-write('turn:archive', [2026, 2027, 2028, 2029, 2030, 2031]);
+await write('turn:archive', [2026, 2027, 2028, 2029, 2030, 2031]);
 
 // ─── 2031 PERFECT KNOWLEDGE (verbatim from the build prompt) ─────────────────
 const pk2031 = `🌍 SHARED WORLD SUMMARY — TURN 6 (2031)
@@ -282,7 +311,7 @@ Emerging Flashpoints & Opportunities for 2032
 
 End of Turn 6 — 2031 World Summary.`;
 
-write('turn:2031:summary', {
+await write('turn:2031:summary', {
   publicSummary: pk2031,
   perfectKnowledge: pk2031,
 });
@@ -297,14 +326,14 @@ const welcomeMsg = {
   timestamp: Date.now(),
   isGM: true,
 };
-write('chat:public', [welcomeMsg]);
-
-// ─── HASH HELPER NOTE ────────────────────────────────────────────────────────
-// The seed uses SHA-256 hashes ($sha256$...). The auth system needs to handle these.
-// After first run, GM should reset all passwords via the dashboard (which will use bcrypt).
+await write('chat:public', [welcomeMsg]);
 
 console.log('\n✅ Seed complete! Game is ready for Year 2032.');
 console.log('\n⚠️  IMPORTANT: All empire passwords are set to placeholder values.');
 console.log('   The GM must reset each password via the GM Dashboard before distributing to players.');
 console.log('\n   Placeholder passwords follow the pattern: PLAYERNAME-CHANGE-ME');
 console.log('   Example: PHILLIP-CHANGE-ME, MICHAEL-CHANGE-ME, etc.\n');
+
+} // end seed()
+
+seed().catch(err => { console.error('\n❌ Seed failed:', err.message); process.exit(1); });

@@ -1,8 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 import { dbGet, dbSet } from '@/lib/db';
 import { getSession, extractToken, verifyGMPassword } from '@/lib/auth';
 import { ChatMessage } from '@/lib/types';
 import { v4 as uuidv4 } from 'uuid';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   const after = parseInt(req.nextUrl.searchParams.get('after') ?? '0');

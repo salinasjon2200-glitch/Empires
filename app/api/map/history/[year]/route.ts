@@ -1,6 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 import { dbGet } from '@/lib/db';
 import { TerritoryMap } from '@/lib/types';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(_req: NextRequest, { params }: { params: { year: string } }) {
   const year = parseInt(params.year);

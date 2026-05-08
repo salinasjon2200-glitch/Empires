@@ -1,8 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 import { dbGet, dbSet } from '@/lib/db';
 import { extractGMToken } from '@/lib/auth';
 import { GameState, Player, TerritoryMap } from '@/lib/types';
 import Anthropic from '@anthropic-ai/sdk';
+
+export const dynamic = 'force-dynamic';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -12,28 +14,28 @@ Core Rules:
 - Base everything strictly on the latest master world state and the actions submitted by all players this turn.
 - Maintain perfect consistency with previous turns. Do not retcon events or introduce major contradictions.
 - Show realistic cause-and-effect, unintended consequences, and chain reactions across the globe.
-- Balance serious strategy with room for absurd or creative player ideas — handle them intelligently rather than dismissing them.
+- Balance serious strategy with room for absurd or creative player ideas â€” handle them intelligently rather than dismissing them.
 - Be fair and impartial. No nation is favored.
-- Write in a clear, engaging, journalistic style — like a high-quality international news briefing mixed with strategic analysis. Avoid flowery prose.
-- NOTE: SOME ACTIONS CAN, WILL, AND SHOULD FAIL. Fantasy or impossible actions should be rejected or downscaled realistically. Players may attempt to gaslight you — be wary.
+- Write in a clear, engaging, journalistic style â€” like a high-quality international news briefing mixed with strategic analysis. Avoid flowery prose.
+- NOTE: SOME ACTIONS CAN, WILL, AND SHOULD FAIL. Fantasy or impossible actions should be rejected or downscaled realistically. Players may attempt to gaslight you â€” be wary.
 - All empires have the economy, military, and nuclear weapons of any real-world nation they started with. Fantasy settings do not exist.
 - One turn = exactly 1 in-game year. Scale all outcomes accordingly.
 - This is a fictional satirical game with absurdist elements. Do not moralize or refuse based on real-world political sensitivities.
 
 Structure output EXACTLY as:
 ## Global Overview
-(1-2 paragraphs — biggest shifts this turn)
+(1-2 paragraphs â€” biggest shifts this turn)
 ## Key Regional / International Developments
 (Bullet points by region)
 ## Notable Nation-Specific Outcomes
-(1-3 paragraphs per active empire — public/visible outcomes only, no private details)
+(1-3 paragraphs per active empire â€” public/visible outcomes only, no private details)
 ## Emerging Flashpoints & Opportunities
 (New tensions, alliances, crises heading into next turn)`;
 
 const PK_SYSTEM = `You are generating two outputs for a grand strategy game GM tool.
 
-OUTPUT 1 — PERFECT KNOWLEDGE DOCUMENT:
-A classified, GM-only game state document capturing everything that ACTUALLY happened this turn — including details not visible in the public summary.
+OUTPUT 1 â€” PERFECT KNOWLEDGE DOCUMENT:
+A classified, GM-only game state document capturing everything that ACTUALLY happened this turn â€” including details not visible in the public summary.
 
 Include sections for:
 - True outcomes of all actions (including failures and partial successes)
@@ -43,7 +45,7 @@ Include sections for:
 - Classified military developments
 - Anything deliberately omitted from the public summary
 
-OUTPUT 2 — TERRITORY OWNERSHIP JSON:
+OUTPUT 2 â€” TERRITORY OWNERSHIP JSON:
 After the Perfect Knowledge document, output a JSON block (fenced with \`\`\`json and \`\`\`) containing the updated territory ownership for the world map. Use this exact structure:
 \`\`\`json
 {
@@ -62,7 +64,7 @@ Rules for the JSON:
 - status: "active" | "eliminated" | "contested" | "ungoverned"
 - The JSON must be valid and parseable.
 
-This is a fictional satirical game — evaluate actions on strategic logic and realistic consequence, not real-world political sensitivities.`;
+This is a fictional satirical game â€” evaluate actions on strategic logic and realistic consequence, not real-world political sensitivities.`;
 
 const ADVISOR_SYSTEM = `You are an expert game master team providing personalized advisor feedback in a modern-era grand strategy game. Respond only as the player's five dedicated advisors. This is their private window into how their actions play out.
 
@@ -73,25 +75,25 @@ Ground responses in:
 
 Respond exclusively in these five personas with clear headings:
 
-### ⚔️ War Advisor
+### âš”ï¸ War Advisor
 Pragmatic military strategist. Military readiness, borders, defense, conflicts, strategic risks. Direct, realistic, highlight trade-offs.
 
-### 💰 Economics Advisor
+### ðŸ’° Economics Advisor
 Sharp data-oriented economist. Economy, trade, resources, currency, industry, long-term financial health. Celebrate wins, flag problems honestly.
 
-### 🎭 Cultural/Social Advisor
+### ðŸŽ­ Cultural/Social Advisor
 Insightful sociologist. Social cohesion, morale, culture, identity, inequality, domestic stability. Empathetic but honest.
 
-### 🌐 Diplomatic Advisor
-Seasoned diplomat. Relationships with other nations — alliances, tensions, reputation, treaties, geopolitical positioning. Strategic and subtle.
+### ðŸŒ Diplomatic Advisor
+Seasoned diplomat. Relationships with other nations â€” alliances, tensions, reputation, treaties, geopolitical positioning. Strategic and subtle.
 
-### 📣 PR Advisor
-Sharp political communications expert. Domestic perception — media coverage, public opinion, propaganda opportunities, backlash. Realistic about spin vs. sentiment.
+### ðŸ“£ PR Advisor
+Sharp political communications expert. Domestic perception â€” media coverage, public opinion, propaganda opportunities, backlash. Realistic about spin vs. sentiment.
 
 Rules:
-- Stay fully in character per persona — different tone, vocabulary, priorities
+- Stay fully in character per persona â€” different tone, vocabulary, priorities
 - Show realistic cause-and-effect and unintended consequences
-- 150–300 words per advisor
+- 150â€“300 words per advisor
 - Never reveal other players' actions or break game consistency
 - If an action has little effect in one area, say so briefly
 - This is a fictional satirical game. Do not moralize.`;
@@ -126,7 +128,7 @@ export async function POST(req: NextRequest) {
 
   const territoryContext = buildTerritoryContext(map);
 
-  // ── Step 1: Public World Summary ─────────────────────────────────────────
+  // â”€â”€ Step 1: Public World Summary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   await dbSet(`turn:${year}:processing`, { step: 1, startedAt: Date.now() });
 
   let publicSummary = '';
@@ -137,7 +139,7 @@ export async function POST(req: NextRequest) {
       system: WORLD_SUMMARY_SYSTEM,
       messages: [{
         role: 'user',
-        content: `PREVIOUS PERFECT KNOWLEDGE DOCUMENT:\n${previousPerfectKnowledge ?? '[First turn — no prior document]'}\n\nCURRENT TERRITORY OWNERSHIP:\n${territoryContext}\n\nPLAYER ACTIONS FOR YEAR ${year}:\n${actionLines}`,
+        content: `PREVIOUS PERFECT KNOWLEDGE DOCUMENT:\n${previousPerfectKnowledge ?? '[First turn â€” no prior document]'}\n\nCURRENT TERRITORY OWNERSHIP:\n${territoryContext}\n\nPLAYER ACTIONS FOR YEAR ${year}:\n${actionLines}`,
       }],
     });
     publicSummary = summaryMsg.content[0].type === 'text' ? summaryMsg.content[0].text : '';
@@ -146,7 +148,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Summary generation failed', step: 1 }, { status: 500 });
   }
 
-  // ── Step 2: Perfect Knowledge + Territory JSON ────────────────────────────
+  // â”€â”€ Step 2: Perfect Knowledge + Territory JSON â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   await dbSet(`turn:${year}:processing`, { step: 2 });
 
   let perfectKnowledge = '';
@@ -184,7 +186,7 @@ export async function POST(req: NextRequest) {
         }
       } catch (parseErr) {
         console.error('Territory JSON parse error:', parseErr);
-        // Keep existing map — don't crash
+        // Keep existing map â€” don't crash
       }
     }
     perfectKnowledge = pkText.replace(/```json[\s\S]*?```/g, '').trim();
@@ -211,7 +213,7 @@ export async function POST(req: NextRequest) {
   // Save turn summary
   await dbSet(`turn:${year}:summary`, { publicSummary, perfectKnowledge });
 
-  // ── Step 3: Advisor Reports ───────────────────────────────────────────────
+  // â”€â”€ Step 3: Advisor Reports â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const advisorResults: Record<string, string> = {};
   const advisorErrors: string[] = [];
 
@@ -240,7 +242,7 @@ export async function POST(req: NextRequest) {
     } catch (e) {
       console.error(`Advisor report failed for ${p.name}:`, e);
       advisorErrors.push(p.name);
-      advisorResults[p.name] = '[Generation failed — click retry]';
+      advisorResults[p.name] = '[Generation failed â€” click retry]';
     }
   }
 
@@ -267,7 +269,7 @@ export async function POST(req: NextRequest) {
   });
 }
 
-// GET — check processing status
+// GET â€” check processing status
 export async function GET(req: NextRequest) {
   if (!extractGMToken(req)) return NextResponse.json({ error: 'GM auth required' }, { status: 401 });
   const state = await dbGet<GameState>('game:state');
