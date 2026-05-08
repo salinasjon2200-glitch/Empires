@@ -15,14 +15,14 @@ export default function SubmitPage() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [actions, setActions] = useState<Record<string, boolean>>({});
   const [year, setYear] = useState(2032);
-  const [turnOpen, setTurnOpen] = useState(false);
   const [actionText, setActionText] = useState('');
-  const [turnCode, setTurnCode] = useState('');
-  const [codeVerified, setCodeVerified] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [prevSummary, setPrevSummary] = useState('');
+  const [warChest, setWarChest] = useState<{ balance: number; threshold: number; contributions: Array<{ name: string; amount: number; timestamp: number }>; lastTurnCost: number } | null>(null);
+  const [countdown, setCountdown] = useState(0);
+  const [lastTurnAt, setLastTurnAt] = useState<number | null>(null);
 
   useEffect(() => {
     const stored = localStorage.getItem('empires-player');
@@ -37,7 +37,8 @@ export default function SubmitPage() {
       setPlayers(playerData.players ?? []);
       const yr = state.currentYear ?? 2032;
       setYear(yr);
-      setTurnOpen(state.turnOpen ?? false);
+
+      if (state.lastTurnCompletedAt) setLastTurnAt(state.lastTurnCompletedAt);
 
       // Load previous summary
       const prevYear = yr - 1;
@@ -54,18 +55,20 @@ export default function SubmitPage() {
     if (localStorage.getItem(submittedKey)) setSubmitted(true);
   }, [year]);
 
-  async function verifyCode() {
-    setLoading(true); setError('');
-    const r = await fetch('/api/auth/verify-turn-code', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.sessionToken}` },
-      body: JSON.stringify({ turnCode }),
-    });
-    const d = await r.json();
-    if (r.ok && d.valid) { setCodeVerified(true); }
-    else { setError(d.error ?? 'Invalid turn code'); }
-    setLoading(false);
-  }
+  // Load war chest
+  useEffect(() => {
+    fetch('/api/war-chest').then(r => r.json()).then(d => setWarChest(d.warChest)).catch(() => {});
+  }, []);
+
+  // Countdown interval
+  useEffect(() => {
+    if (!lastTurnAt) return;
+    const interval = setInterval(() => {
+      const remaining = (lastTurnAt + 24 * 60 * 60 * 1000) - Date.now();
+      setCountdown(Math.max(0, remaining));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [lastTurnAt]);
 
   async function submitAction() {
     if (!actionText.trim() || !session) return;
@@ -157,34 +160,11 @@ export default function SubmitPage() {
                 <p style={{ color: 'var(--text2)' }}>You must authenticate to submit actions.</p>
                 <Link href="/login" className="btn-primary inline-block mt-4">Empire Login</Link>
               </div>
-            ) : !turnOpen ? (
-              <div className="card text-center py-8">
-                <p className="text-lg" style={{ color: 'var(--text2)' }}>Turn not yet open.</p>
-                <p className="text-sm mt-2" style={{ color: 'var(--text2)' }}>Waiting for GM to open the next turn.</p>
-              </div>
             ) : submitted ? (
               <div className="card text-center py-8 space-y-3">
                 <div className="text-4xl">✅</div>
                 <p className="text-lg font-semibold success">Actions Declared</p>
                 <p style={{ color: 'var(--text2)' }}>Your orders for Year {year} have been logged. Await the GM's processing.</p>
-              </div>
-            ) : !codeVerified ? (
-              <div className="card space-y-4">
-                <p className="label">Turn Code Required</p>
-                <p className="text-sm" style={{ color: 'var(--text2)' }}>Enter the turn code provided by the GM to unlock action submission.</p>
-                <div className="flex gap-3">
-                  <input
-                    className="input flex-1 font-mono"
-                    placeholder="XXXX-XXXX"
-                    value={turnCode}
-                    onChange={e => setTurnCode(e.target.value.toUpperCase())}
-                    onKeyDown={e => e.key === 'Enter' && verifyCode()}
-                  />
-                  <button className="btn-primary" onClick={verifyCode} disabled={loading || !turnCode}>
-                    {loading ? '...' : 'Verify'}
-                  </button>
-                </div>
-                {error && <p className="danger text-sm">{error}</p>}
               </div>
             ) : (
               <div className="card space-y-4">
@@ -209,7 +189,7 @@ export default function SubmitPage() {
             )}
           </div>
 
-          {/* RIGHT: Submission tracker + players */}
+          {/* RIGHT: Submission tracker + players + war chest */}
           <div className="space-y-4">
             <div className="card">
               <p className="label mb-3">Submission Status</p>
@@ -245,6 +225,46 @@ export default function SubmitPage() {
                 ))}
               </div>
             </div>
+
+            {/* War Chest */}
+            {warChest && (
+              <div className="card space-y-3">
+                <p className="label mb-1">Community War Chest</p>
+                <div className="flex justify-between items-end">
+                  <span className="text-lg font-bold display-font" style={{ color: warChest.balance >= warChest.threshold ? 'var(--success)' : 'var(--accent)' }}>
+                    ${warChest.balance.toFixed(2)}
+                  </span>
+                  <span className="text-xs" style={{ color: 'var(--text2)' }}>/ ${warChest.threshold.toFixed(2)}</span>
+                </div>
+                <div className="rounded-full overflow-hidden" style={{ height: 6, background: 'var(--border)' }}>
+                  <div
+                    className="h-full rounded-full transition-all"
+                    style={{
+                      width: `${Math.min(100, (warChest.balance / Math.max(0.01, warChest.threshold)) * 100)}%`,
+                      background: warChest.balance >= warChest.threshold ? 'var(--success)' : 'var(--accent)',
+                    }}
+                  />
+                </div>
+                <p className="text-xs" style={{ color: 'var(--text2)' }}>
+                  {warChest.balance >= warChest.threshold
+                    ? 'Threshold met — GM can process turn'
+                    : `$${(warChest.threshold - warChest.balance).toFixed(2)} more needed to run next turn`}
+                </p>
+                {warChest.contributions.length > 0 && (
+                  <div className="space-y-1">
+                    <p className="label" style={{ fontSize: '0.6rem' }}>Recent Contributors</p>
+                    {[...warChest.contributions].reverse().slice(0, 5).map((c, i) => (
+                      <p key={i} className="text-xs" style={{ color: 'var(--text2)' }}>{c.name} — ${Number(c.amount).toFixed(2)}</p>
+                    ))}
+                  </div>
+                )}
+                {countdown > 0 && (
+                  <p className="text-xs" style={{ color: 'var(--text2)' }}>
+                    Next turn in: {Math.floor(countdown / 3600000)}h {Math.floor((countdown % 3600000) / 60000)}m
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>

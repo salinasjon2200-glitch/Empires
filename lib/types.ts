@@ -16,6 +16,32 @@ export interface GameState {
   biddingClosesAt?: number;
   turnOpen: boolean;
   processingComplete: boolean;
+  lastTurnCompletedAt?: number;
+  contentMode?: 'unrestricted' | 'school';
+}
+
+export interface GameInstance {
+  id: string;
+  name: string;
+  startYear: number;
+  contentMode: 'unrestricted' | 'school';
+  setupMode: 'bidding' | 'random';
+  warChestPerPlayer: number;
+  createdAt: number;
+  status: 'active' | 'archived';
+}
+
+export interface WarChest {
+  balance: number;
+  threshold: number;
+  contributions: Array<{
+    name: string;
+    amount: number;
+    method: 'manual' | 'stripe';
+    timestamp: number;
+  }>;
+  lastTurnCost: number;
+  lastUpdated: number;
 }
 
 export interface Territory {

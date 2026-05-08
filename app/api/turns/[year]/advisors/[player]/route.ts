@@ -1,10 +1,14 @@
-﻿import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { dbGet } from '@/lib/db';
 import { getSession, extractToken, extractGMToken } from '@/lib/auth';
+import { getGameId, gk } from '@/lib/game';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest, { params }: { params: { year: string; player: string } }) {
+  const gameId = getGameId(req);
+  const k = gk(gameId);
+
   const year = parseInt(params.year);
   const playerName = decodeURIComponent(params.player);
 
@@ -19,7 +23,7 @@ export async function GET(req: NextRequest, { params }: { params: { year: string
     }
   }
 
-  const advisors = await dbGet<Record<string, string>>(`turn:${year}:advisors`);
+  const advisors = await dbGet<Record<string, string>>(k(`turn:${year}:advisors`));
   if (!advisors) return NextResponse.json({ error: 'No advisor reports for this turn' }, { status: 404 });
 
   const report = advisors[playerName];
@@ -30,16 +34,19 @@ export async function GET(req: NextRequest, { params }: { params: { year: string
 
 // Retry single advisor report
 export async function POST(req: NextRequest, { params }: { params: { year: string; player: string } }) {
+  const gameId = getGameId(req);
+  const k = gk(gameId);
+
   if (!extractGMToken(req)) return NextResponse.json({ error: 'GM auth required' }, { status: 401 });
 
   const year = parseInt(params.year);
   const playerName = decodeURIComponent(params.player);
 
   const [players, actions, summary, advisors] = await Promise.all([
-    dbGet<import('@/lib/types').Player[]>('game:players'),
-    dbGet<Record<string, string>>(`turn:${year}:actions`),
-    dbGet<{ publicSummary: string }>(`turn:${year}:summary`),
-    dbGet<Record<string, string>>(`turn:${year}:advisors`),
+    dbGet<import('@/lib/types').Player[]>(k('game:players')),
+    dbGet<Record<string, string>>(k(`turn:${year}:actions`)),
+    dbGet<{ publicSummary: string }>(k(`turn:${year}:summary`)),
+    dbGet<Record<string, string>>(k(`turn:${year}:advisors`)),
   ]);
 
   const player = (players ?? []).find(p => p.name === playerName);
@@ -48,7 +55,7 @@ export async function POST(req: NextRequest, { params }: { params: { year: strin
   const { default: Anthropic } = await import('@anthropic-ai/sdk');
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-  const map = await dbGet<import('@/lib/types').TerritoryMap>('map:territories') ?? {};
+  const map = await dbGet<import('@/lib/types').TerritoryMap>(k('map:territories')) ?? {};
   const playerTerritories = Object.entries(map)
     .filter(([, t]) => t.empire === player.empire)
     .map(([c]) => c)
@@ -66,7 +73,7 @@ export async function POST(req: NextRequest, { params }: { params: { year: strin
 
   const report = msg.content[0].type === 'text' ? msg.content[0].text : '';
   const updated = { ...(advisors ?? {}), [playerName]: report };
-  await (await import('@/lib/db')).dbSet(`turn:${year}:advisors`, updated);
+  await (await import('@/lib/db')).dbSet(k(`turn:${year}:advisors`), updated);
 
   return NextResponse.json({ report, year, playerName });
 }

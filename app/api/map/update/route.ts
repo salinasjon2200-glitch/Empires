@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dbGet, dbSet } from '@/lib/db';
 import { TerritoryMap, Player } from '@/lib/types';
+import { getGameId, gk } from '@/lib/game';
 import Anthropic from '@anthropic-ai/sdk';
 
 export const dynamic = 'force-dynamic';
@@ -13,13 +14,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  const gameId = getGameId(req);
+  const k = gk(gameId);
+
   const { description } = await req.json();
   if (!description?.trim()) {
     return NextResponse.json({ error: 'Missing description' }, { status: 400 });
   }
 
-  const currentTerritories = await dbGet<TerritoryMap>('map:territories') ?? {};
-  const players = await dbGet<Player[]>('game:players') ?? [];
+  const currentTerritories = await dbGet<TerritoryMap>(k('map:territories')) ?? {};
+  const players = await dbGet<Player[]>(k('game:players')) ?? [];
   const activePlayers = players.filter(p => p.status === 'active');
 
   const playerList = activePlayers.map(p => `- ${p.empire} (${p.name}, color: ${p.color})`).join('\n');
@@ -71,7 +75,7 @@ Use the exact empire colors listed above. Do not add commentary outside the JSON
   }
 
   const newTerritories = parsed.territories ?? {};
-  await dbSet('map:territories', newTerritories);
+  await dbSet(k('map:territories'), newTerritories);
 
   // Sync player territory lists
   const updatedPlayers = players.map(p => ({
@@ -80,7 +84,7 @@ Use the exact empire colors listed above. Do not add commentary outside the JSON
       .filter(([, t]) => t.empire === p.empire && t.status === 'active')
       .map(([country]) => country),
   }));
-  await dbSet('game:players', updatedPlayers);
+  await dbSet(k('game:players'), updatedPlayers);
 
   return NextResponse.json({ ok: true, territories: newTerritories });
 }

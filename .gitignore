@@ -37,3 +37,6 @@ next-env.d.ts
 
 # local game data (JSON file fallback — not for version control)
 /data/
+
+.vercel
+.env*.local

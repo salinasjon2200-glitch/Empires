@@ -1,14 +1,18 @@
-﻿import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { dbGet, dbSet } from '@/lib/db';
 import { hashPassword } from '@/lib/auth';
 import { extractGMToken } from '@/lib/auth';
 import { Player, GameState } from '@/lib/types';
 import { PLAYER_COLORS } from '@/lib/constants';
+import { getGameId, gk } from '@/lib/game';
 
 export const dynamic = 'force-dynamic';
 
-// POST â€” register a new player (GM only)
+// POST – register a new player (GM only)
 export async function POST(req: NextRequest) {
+  const gameId = getGameId(req);
+  const k = gk(gameId);
+
   if (!extractGMToken(req)) {
     return NextResponse.json({ error: 'GM auth required' }, { status: 401 });
   }
@@ -18,7 +22,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
   }
 
-  const players = await dbGet<Player[]>('game:players') ?? [];
+  const players = await dbGet<Player[]>(k('game:players')) ?? [];
   if (players.find(p => p.empire.toLowerCase() === empire.toLowerCase())) {
     return NextResponse.json({ error: 'Empire already exists' }, { status: 409 });
   }
@@ -27,16 +31,19 @@ export async function POST(req: NextRequest) {
   const passwordHash = await hashPassword(password);
   const newPlayer: Player = { name, empire, passwordHash, color, status: 'active', territories: [] };
   players.push(newPlayer);
-  await dbSet('game:players', players);
+  await dbSet(k('game:players'), players);
 
   return NextResponse.json({ success: true, color, empire, name });
 }
 
-// GET â€” list all players with passwords visible (GM only)
+// GET – list all players with passwords visible (GM only)
 export async function GET(req: NextRequest) {
+  const gameId = getGameId(req);
+  const k = gk(gameId);
+
   if (!extractGMToken(req)) {
     return NextResponse.json({ error: 'GM auth required' }, { status: 401 });
   }
-  const players = await dbGet<Player[]>('game:players') ?? [];
+  const players = await dbGet<Player[]>(k('game:players')) ?? [];
   return NextResponse.json({ players });
 }

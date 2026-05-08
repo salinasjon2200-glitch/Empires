@@ -2,13 +2,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import ChatSidebar from '@/components/ChatSidebar';
+import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 
 const WorldMap = dynamic(() => import('@/components/WorldMap'), { ssr: false });
 
 interface Player { name: string; empire: string; color: string; status: string; passwordHash: string; territories: string[]; eliminatedYear?: number; }
-interface TurnCode { used: boolean; player: string; usedAt?: number; }
 
-type Tab = 'overview' | 'actions' | 'codes' | 'processing' | 'pk' | 'players' | 'chats' | 'mapupdate';
+type Tab = 'overview' | 'actions' | 'processing' | 'pk' | 'players' | 'chats' | 'mapupdate' | 'warchest';
 
 export default function GMPage() {
   const [gmPassword, setGmPassword] = useState('');
@@ -20,18 +21,17 @@ export default function GMPage() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [territories, setTerritories] = useState({});
   const [actions, setActions] = useState<Record<string, string>>({});
-  const [codes, setCodes] = useState<Record<string, TurnCode>>({});
   const [prevPK, setPrevPK] = useState('');
   const [processing, setProcessing] = useState(false);
   const [processLog, setProcessLog] = useState<string[]>([]);
   const [processError, setProcessError] = useState('');
+  const [streamingText, setStreamingText] = useState('');
+  const [streamingStep, setStreamingStep] = useState(0);
+  const [advisorProgress, setAdvisorProgress] = useState({ index: 0, total: 0 });
   const [allChats, setAllChats] = useState<{ public: unknown[]; private: Record<string, unknown[]>; groups: Record<string, unknown> } | null>(null);
-  const [newCode, setNewCode] = useState('');
-  const [newCodePlayer, setNewCodePlayer] = useState('');
   const [eliminateTarget, setEliminateTarget] = useState('');
   const [resetPasswordTarget, setResetPasswordTarget] = useState('');
   const [resetPasswordValue, setResetPasswordValue] = useState('');
-  const [turnOpen, setTurnOpen] = useState(false);
   const [archive, setArchive] = useState<number[]>([]);
   const [historyYear, setHistoryYear] = useState<number | null>(null);
   const [historyPK, setHistoryPK] = useState('');
@@ -44,7 +44,25 @@ export default function GMPage() {
   const [mapUpdating, setMapUpdating] = useState(false);
   const [mapUpdateLog, setMapUpdateLog] = useState('');
 
-  const headers = useCallback(() => ({ 'Authorization': `Bearer ${gmPassword}`, 'Content-Type': 'application/json' }), [gmPassword]);
+  // New states
+  const [currentGameId, setCurrentGameId] = useState('s2');
+  const [gamesList, setGamesList] = useState<Array<{ id: string; name: string; status: string; contentMode: string; createdAt: number }>>([]);
+  const [gamesLoaded, setGamesLoaded] = useState(false);
+  const [warChest, setWarChest] = useState<{ balance: number; threshold: number; contributions: Array<{ name: string; amount: number; method: string; timestamp: number }>; lastTurnCost: number } | null>(null);
+  const [wcAmount, setWcAmount] = useState('');
+  const [wcContributor, setWcContributor] = useState('');
+  const [wcSaving, setWcSaving] = useState(false);
+  const [cooldownRemaining, setCooldownRemaining] = useState(0);
+  const [newGameName, setNewGameName] = useState('');
+  const [newGameYear, setNewGameYear] = useState(2032);
+  const [newGameContent, setNewGameContent] = useState<'unrestricted' | 'school'>('unrestricted');
+  const [newGameSetup, setNewGameSetup] = useState<'bidding' | 'random'>('bidding');
+  const [creatingGame, setCreatingGame] = useState(false);
+  const [randomPool, setRandomPool] = useState<string[]>([]);
+  const [randomAssignments, setRandomAssignments] = useState<Array<{ playerName: string; empire: string; color: string; country: string }>>([]);
+  const [randomizing, setRandomizing] = useState(false);
+
+  const headers = useCallback(() => ({ 'Authorization': `Bearer ${gmPassword}`, 'Content-Type': 'application/json', 'X-Game-ID': currentGameId }), [gmPassword, currentGameId]);
 
   async function login() {
     const r = await fetch('/api/auth/gm-login', {
@@ -66,18 +84,26 @@ export default function GMPage() {
 
   const loadAll = useCallback(async () => {
     if (!authed) return;
-    const [stateR, playersR, mapR, actionsR, codesR] = await Promise.all([
+    const [stateR, playersR, mapR, actionsR] = await Promise.all([
       fetch('/api/game/state'),
       fetch('/api/game/setup', { headers: headers() }),
       fetch('/api/map/territories'),
       fetch('/api/turns/actions', { headers: headers() }),
-      fetch('/api/turns/codes', { headers: headers() }),
     ]);
-    if (stateR.ok) { const s = await stateR.json(); setYear(s.currentYear ?? 2032); setTurnOpen(s.turnOpen ?? false); }
+    if (stateR.ok) {
+      const s = await stateR.json();
+      setYear(s.currentYear ?? 2032);
+      const lastCompleted = s.lastTurnCompletedAt;
+      if (lastCompleted) {
+        const remaining = (lastCompleted + 24 * 60 * 60 * 1000) - Date.now();
+        setCooldownRemaining(Math.max(0, remaining));
+      } else {
+        setCooldownRemaining(0);
+      }
+    }
     if (playersR.ok) { const d = await playersR.json(); setPlayers(d.players ?? []); }
     if (mapR.ok) { const d = await mapR.json(); setTerritories(d.territories ?? {}); }
     if (actionsR.ok) { const d = await actionsR.json(); setActions(d.actions ?? {}); }
-    if (codesR.ok) { const d = await codesR.json(); setCodes(d.codes ?? {}); }
     const archR = await fetch('/api/game/archive');
     if (archR.ok) { const d = await archR.json(); setArchive(d.archive ?? []); }
 
@@ -88,6 +114,45 @@ export default function GMPage() {
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
+  // Load games list
+  useEffect(() => {
+    if (!authed || gamesLoaded) return;
+    fetch('/api/games', { headers: { 'Authorization': `Bearer ${gmPassword}`, 'Content-Type': 'application/json', 'X-Game-ID': currentGameId } })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) { setGamesList(d.games ?? []); setGamesLoaded(true); } })
+      .catch(() => {});
+  }, [authed, gamesLoaded, gmPassword, currentGameId]);
+
+  const loadWarChest = useCallback(async () => {
+    if (!authed) return;
+    const r = await fetch('/api/war-chest', { headers: headers() });
+    if (r.ok) setWarChest(await r.json().then((d: { warChest: typeof warChest }) => d.warChest));
+  }, [authed, headers]);
+
+  useEffect(() => { loadWarChest(); }, [loadWarChest]);
+
+  // Cooldown countdown interval
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCooldownRemaining(prev => Math.max(0, prev - 1000));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  async function addFunds() {
+    if (!wcAmount || isNaN(Number(wcAmount)) || Number(wcAmount) <= 0) return;
+    setWcSaving(true);
+    await fetch('/api/war-chest', {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({ amount: Number(wcAmount), contributorName: wcContributor, method: 'manual' }),
+    });
+    setWcAmount('');
+    setWcContributor('');
+    await loadWarChest();
+    setWcSaving(false);
+  }
+
   async function loadChats() {
     const r = await fetch('/api/chat/all', { headers: headers() });
     if (r.ok) setAllChats(await r.json());
@@ -96,53 +161,87 @@ export default function GMPage() {
   useEffect(() => { if (tab === 'chats' && authed) loadChats(); }, [tab, authed]);
 
   async function processTurn() {
+    if (cooldownRemaining > 0) {
+      setProcessError(`Cooldown active: ${Math.ceil(cooldownRemaining / 3600000)} hours remaining.`);
+      return;
+    }
     setProcessing(true);
     setProcessLog([]);
     setProcessError('');
+    setStreamingText('');
+    setStreamingStep(0);
+    setAdvisorProgress({ index: 0, total: 0 });
     setProcessLog(l => [...l, `Initiating Turn ${year} processing...`]);
-    setProcessLog(l => [...l, 'Step 1: Generating world summary...']);
-    const r = await fetch('/api/turns/process', {
-      method: 'POST',
-      headers: headers(),
-      body: JSON.stringify({ previousPerfectKnowledge: prevPK }),
-    });
-    const d = await r.json();
-    if (r.ok) {
-      setProcessLog(l => [...l, 'Step 2: Generated Perfect Knowledge + territory map.', 'Step 3: Generated all advisor reports.', `✓ Turn ${year} fully processed.`]);
-      if (d.advisorErrors?.length) {
-        setProcessLog(l => [...l, `⚠️ Advisor failures: ${d.advisorErrors.join(', ')}`]);
-      }
-      loadAll();
-    } else {
-      setProcessError(d.error ?? 'Processing failed');
-      setProcessLog(l => [...l, `✗ Error at step ${d.step ?? '?'}: ${d.error}`]);
+
+    let r: Response;
+    try {
+      r = await fetch('/api/turns/process', {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({ previousPerfectKnowledge: prevPK }),
+      });
+    } catch {
+      setProcessError('Network error — could not reach server.');
+      setProcessing(false);
+      return;
     }
+
+    if (!r.ok || !r.body) {
+      setProcessError('Failed to start processing.');
+      setProcessing(false);
+      return;
+    }
+
+    const reader = r.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const event = JSON.parse(line);
+            if (event.type === 'progress') {
+              setProcessLog(l => [...l, event.message]);
+              if (event.step !== streamingStep) {
+                setStreamingText('');
+                setStreamingStep(event.step);
+              }
+              if (event.total) setAdvisorProgress({ index: event.index ?? 0, total: event.total });
+            } else if (event.type === 'token') {
+              setStreamingText(t => t + event.text);
+            } else if (event.type === 'step_done') {
+              setProcessLog(l => [...l, event.message]);
+              setStreamingText('');
+            } else if (event.type === 'advisor_done') {
+              setProcessLog(l => [...l, `  ✓ ${event.empire} (${event.index}/${event.total})`]);
+              setAdvisorProgress({ index: event.index, total: event.total });
+            } else if (event.type === 'advisor_error') {
+              setProcessLog(l => [...l, `  ✗ ${event.empire} — failed`]);
+            } else if (event.type === 'done') {
+              setProcessLog(l => [...l, `✓ Turn ${event.year} fully processed. Year advances to ${event.nextYear}.`]);
+              if (event.advisorErrors?.length) {
+                setProcessLog(l => [...l, `⚠️ Advisor failures: ${event.advisorErrors.join(', ')}`]);
+              }
+              loadAll();
+            } else if (event.type === 'error') {
+              setProcessError(event.message);
+            }
+          } catch { /* malformed line — skip */ }
+        }
+      }
+    } catch (e) {
+      setProcessError(`Stream read error: ${e}`);
+    }
+
     setProcessing(false);
-  }
-
-  async function addCode() {
-    if (!newCode || !newCodePlayer) return;
-    await fetch('/api/turns/codes', {
-      method: 'POST', headers: headers(),
-      body: JSON.stringify({ action: 'add', player: newCodePlayer, code: newCode }),
-    });
-    setNewCode(''); setNewCodePlayer('');
-    loadAll();
-  }
-
-  async function autoGenerateCodes() {
-    await fetch('/api/turns/codes', { method: 'POST', headers: headers(), body: JSON.stringify({ action: 'auto-generate' }) });
-    loadAll();
-  }
-
-  async function resetCodes() {
-    await fetch('/api/turns/codes', { method: 'POST', headers: headers(), body: JSON.stringify({ action: 'reset' }) });
-    loadAll();
-  }
-
-  async function openTurn() {
-    await fetch('/api/game/advance-turn', { method: 'POST', headers: headers() });
-    loadAll();
+    setStreamingText('');
   }
 
   async function eliminateEmpire() {
@@ -179,12 +278,17 @@ export default function GMPage() {
 
   async function resetPassword() {
     if (!resetPasswordTarget || !resetPasswordValue) return;
-    await fetch('/api/game/reset-password', {
+    const r = await fetch('/api/game/reset-password', {
       method: 'POST', headers: headers(),
       body: JSON.stringify({ empireName: resetPasswordTarget, newPassword: resetPasswordValue }),
     });
-    alert('Password reset successfully');
-    setResetPasswordTarget(''); setResetPasswordValue('');
+    const d = await r.json();
+    if (r.ok) {
+      alert(`Password for ${resetPasswordTarget} reset successfully.`);
+      setResetPasswordTarget(''); setResetPasswordValue('');
+    } else {
+      alert(`Failed to reset password: ${d.error ?? 'Unknown error'}`);
+    }
   }
 
   async function loadHistoryPK(yr: number) {
@@ -220,12 +324,12 @@ export default function GMPage() {
   const tabs: [Tab, string][] = [
     ['overview', 'Overview'],
     ['actions', 'Actions'],
-    ['codes', 'Turn Codes'],
     ['processing', 'Initiate Processing'],
     ['pk', 'Perfect Knowledge'],
     ['players', 'Empire Management'],
     ['chats', 'Intercept All Transmissions'],
     ['mapupdate', 'Map Update'],
+    ['warchest', 'War Chest'],
   ];
 
   if (!authed) {
@@ -234,7 +338,7 @@ export default function GMPage() {
         <div className="max-w-sm w-full space-y-6">
           <h1 className="display-font text-3xl font-black text-center" style={{ color: 'var(--accent)' }}>GM AUTHENTICATION REQUIRED</h1>
           <div className="card space-y-4">
-            <input type="password" className="input" placeholder="GM password..." value={authInput} onChange={e => setAuthInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && login()} />
+            <input type="password" className="input" placeholder="GM password..." value={authInput} onChange={e => setAuthInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && login()} autoCapitalize="none" autoCorrect="off" spellCheck={false} />
             <button className="btn-primary w-full" onClick={login}>Authenticate</button>
           </div>
         </div>
@@ -244,6 +348,12 @@ export default function GMPage() {
 
   const activePlayers = players.filter(p => p.status === 'active');
 
+  // Cooldown/war chest computed values
+  const cooldownHours = Math.ceil(cooldownRemaining / 3600000);
+  const cooldownMins = Math.ceil((cooldownRemaining % 3600000) / 60000);
+  const warChestReady = !warChest || warChest.balance >= warChest.threshold;
+  const cooldownReady = cooldownRemaining <= 0;
+
   return (
     <div className="min-h-screen p-4">
       <div className="max-w-7xl mx-auto space-y-4">
@@ -251,8 +361,7 @@ export default function GMPage() {
         <div className="flex items-center justify-between">
           <h1 className="display-font text-xl font-black" style={{ color: 'var(--accent)' }}>GM DASHBOARD — YEAR {year}</h1>
           <div className="flex gap-2 items-center">
-            <span className={`badge ${turnOpen ? 'badge-success' : 'badge-neutral'}`}>{turnOpen ? 'TURN OPEN' : 'TURN CLOSED'}</span>
-            {!turnOpen && <button className="btn-primary text-sm" onClick={openTurn}>Open Turn {year}</button>}
+            <span className="badge badge-success">TURN OPEN</span>
           </div>
         </div>
 
@@ -271,69 +380,195 @@ export default function GMPage() {
           ))}
         </div>
 
+        {/* Game selector */}
+        {gamesLoaded && gamesList.length > 1 && (
+          <div className="flex items-center gap-3 p-3 rounded" style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}>
+            <p className="label">Active Game:</p>
+            <select className="input text-sm flex-1" value={currentGameId} onChange={e => { setCurrentGameId(e.target.value); loadAll(); }}>
+              <option value="s2">S2 — Current Game</option>
+              {gamesList.map(g => <option key={g.id} value={g.id}>{g.name} ({g.id})</option>)}
+            </select>
+          </div>
+        )}
+
         {/* OVERVIEW */}
         {tab === 'overview' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div className="card">
-              <p className="label mb-2">Turn Status</p>
-              <p className="text-2xl font-bold" style={{ color: 'var(--text)' }}>Year {year}</p>
-              <p className="text-sm mt-1" style={{ color: 'var(--text2)' }}>{Object.keys(actions).length}/{activePlayers.length} actions submitted</p>
-            </div>
-            <div className="card">
-              <p className="label mb-2">Active Empires</p>
-              <p className="text-2xl font-bold">{activePlayers.length}</p>
-              <p className="text-sm mt-1" style={{ color: 'var(--text2)' }}>{players.filter(p => p.status === 'eliminated').length} eliminated</p>
-            </div>
-            <div className="card">
-              <p className="label mb-2">Turn Codes</p>
-              <p className="text-2xl font-bold">{Object.keys(codes).length}</p>
-              <p className="text-sm mt-1" style={{ color: 'var(--text2)' }}>{Object.values(codes).filter(c => c.used).length} used</p>
-            </div>
-            <div className="lg:col-span-3 card">
-              <p className="label mb-3">World Map — click a country to edit</p>
-              <WorldMap
-                territories={territories}
-                mode="territories"
-                height={300}
-                selectedCountry={selectedCountry}
-                onCountryClick={(name) => {
-                  setSelectedCountry(name);
-                  const existing = (territories as Record<string, { empire: string; status: string }>)[name];
-                  setAssignEmpire(existing?.empire ?? '');
-                  setAssignStatus((existing?.status as 'active' | 'contested' | 'ungoverned') ?? 'active');
-                }}
-              />
-              {selectedCountry && (
-                <div className="mt-4 p-3 rounded space-y-3" style={{ background: 'var(--surface2)', border: '1px solid var(--accent)' }}>
-                  <p className="label" style={{ color: 'var(--accent)' }}>Editing: {selectedCountry}</p>
-                  <div className="flex gap-3 flex-wrap items-end">
-                    <div className="flex-1 min-w-40">
-                      <label className="label">Status</label>
-                      <select className="input text-sm" value={assignStatus} onChange={e => setAssignStatus(e.target.value as typeof assignStatus)}>
-                        <option value="active">Active (owned)</option>
-                        <option value="contested">Contested</option>
-                        <option value="ungoverned">Ungoverned</option>
-                        <option value="remove">Remove from map</option>
-                      </select>
-                    </div>
-                    {assignStatus === 'active' && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="card">
+                <p className="label mb-2">Turn Status</p>
+                <p className="text-2xl font-bold" style={{ color: 'var(--text)' }}>Year {year}</p>
+                <p className="text-sm mt-1" style={{ color: 'var(--text2)' }}>{Object.keys(actions).length}/{activePlayers.length} actions submitted</p>
+              </div>
+              <div className="card">
+                <p className="label mb-2">Active Empires</p>
+                <p className="text-2xl font-bold">{activePlayers.length}</p>
+                <p className="text-sm mt-1" style={{ color: 'var(--text2)' }}>{players.filter(p => p.status === 'eliminated').length} eliminated</p>
+              </div>
+              <div className="lg:col-span-3 card">
+                <p className="label mb-3">World Map — click a country to edit</p>
+                <WorldMap
+                  territories={territories}
+                  mode="territories"
+                  height={300}
+                  selectedCountry={selectedCountry}
+                  onCountryClick={(name) => {
+                    setSelectedCountry(name);
+                    const existing = (territories as Record<string, { empire: string; status: string }>)[name];
+                    setAssignEmpire(existing?.empire ?? '');
+                    setAssignStatus((existing?.status as 'active' | 'contested' | 'ungoverned') ?? 'active');
+                  }}
+                />
+                {selectedCountry && (
+                  <div className="mt-4 p-3 rounded space-y-3" style={{ background: 'var(--surface2)', border: '1px solid var(--accent)' }}>
+                    <p className="label" style={{ color: 'var(--accent)' }}>Editing: {selectedCountry}</p>
+                    <div className="flex gap-3 flex-wrap items-end">
                       <div className="flex-1 min-w-40">
-                        <label className="label">Assign to Empire</label>
-                        <select className="input text-sm" value={assignEmpire} onChange={e => setAssignEmpire(e.target.value)}>
-                          <option value="">— Select empire —</option>
-                          {activePlayers.map(p => (
-                            <option key={p.name} value={p.empire}>{p.empire} ({p.name})</option>
-                          ))}
+                        <label className="label">Status</label>
+                        <select className="input text-sm" value={assignStatus} onChange={e => setAssignStatus(e.target.value as typeof assignStatus)}>
+                          <option value="active">Active (owned)</option>
+                          <option value="contested">Contested</option>
+                          <option value="ungoverned">Ungoverned</option>
+                          <option value="remove">Remove from map</option>
                         </select>
                       </div>
-                    )}
-                    <button className="btn-primary" onClick={saveTerritory} disabled={mapSaving || (assignStatus === 'active' && !assignEmpire)}>
-                      {mapSaving ? 'Saving...' : 'Save'}
-                    </button>
-                    <button className="btn-ghost" onClick={() => setSelectedCountry('')}>Cancel</button>
+                      {assignStatus === 'active' && (
+                        <div className="flex-1 min-w-40">
+                          <label className="label">Assign to Empire</label>
+                          <select className="input text-sm" value={assignEmpire} onChange={e => setAssignEmpire(e.target.value)}>
+                            <option value="">— Select empire —</option>
+                            {activePlayers.map(p => (
+                              <option key={p.name} value={p.empire}>{p.empire} ({p.name})</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                      <button className="btn-primary" onClick={saveTerritory} disabled={mapSaving || (assignStatus === 'active' && !assignEmpire)}>
+                        {mapSaving ? 'Saving...' : 'Save'}
+                      </button>
+                      <button className="btn-ghost" onClick={() => setSelectedCountry('')}>Cancel</button>
+                    </div>
                   </div>
+                )}
+              </div>
+            </div>
+
+            {/* Random Assignment */}
+            <div className="card space-y-3">
+              <p className="label">Random Territory Assignment</p>
+              <p className="text-xs" style={{ color: 'var(--text2)' }}>
+                Assign one territory to each active player randomly. Select countries to include in the pool.
+              </p>
+              <div className="flex gap-3 flex-wrap">
+                <button
+                  className="btn-ghost text-sm"
+                  onClick={() => {
+                    const pool = randomPool.length > 0 ? randomPool : Object.keys(territories);
+                    const shuffled = [...pool].sort(() => Math.random() - 0.5);
+                    const newAssignments = activePlayers.slice(0, shuffled.length).map((p, i) => ({
+                      playerName: p.name,
+                      empire: p.empire,
+                      color: p.color,
+                      country: shuffled[i],
+                    }));
+                    setRandomAssignments(newAssignments);
+                  }}
+                >
+                  Randomize
+                </button>
+                {randomAssignments.length > 0 && (
+                  <button
+                    className="btn-primary text-sm"
+                    disabled={randomizing}
+                    onClick={async () => {
+                      setRandomizing(true);
+                      await fetch('/api/game/random-assign', {
+                        method: 'POST',
+                        headers: headers(),
+                        body: JSON.stringify({ assignments: randomAssignments, confirm: true }),
+                      });
+                      setRandomAssignments([]);
+                      loadAll();
+                      setRandomizing(false);
+                    }}
+                  >
+                    {randomizing ? 'Saving...' : 'Confirm Assignments'}
+                  </button>
+                )}
+              </div>
+              {randomAssignments.length > 0 && (
+                <div className="space-y-1 max-h-48 overflow-y-auto">
+                  {randomAssignments.map((a, i) => (
+                    <div key={i} className="flex items-center gap-3 text-sm">
+                      <div className="w-2 h-2 rounded-full" style={{ background: a.color }} />
+                      <span className="flex-1">{a.empire}</span>
+                      <select
+                        className="input text-xs py-1"
+                        style={{ width: 160 }}
+                        value={a.country}
+                        onChange={e => {
+                          const updated = [...randomAssignments];
+                          updated[i] = { ...a, country: e.target.value };
+                          setRandomAssignments(updated);
+                        }}
+                      >
+                        {Object.keys(territories).map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </div>
+                  ))}
                 </div>
               )}
+            </div>
+
+            {/* Create New Game */}
+            <div className="card space-y-3">
+              <p className="label">Create New Game Instance</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label">Game Name</label>
+                  <input className="input text-sm" placeholder="e.g. Season 3" value={newGameName} onChange={e => setNewGameName(e.target.value)} />
+                </div>
+                <div>
+                  <label className="label">Start Year</label>
+                  <input className="input text-sm" type="number" value={newGameYear} onChange={e => setNewGameYear(Number(e.target.value))} />
+                </div>
+                <div>
+                  <label className="label">Content Mode</label>
+                  <select className="input text-sm" value={newGameContent} onChange={e => setNewGameContent(e.target.value as 'unrestricted' | 'school')}>
+                    <option value="unrestricted">Unrestricted</option>
+                    <option value="school">School-Appropriate</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="label">Setup Mode</label>
+                  <select className="input text-sm" value={newGameSetup} onChange={e => setNewGameSetup(e.target.value as 'bidding' | 'random')}>
+                    <option value="bidding">Bidding</option>
+                    <option value="random">Random Assignment</option>
+                  </select>
+                </div>
+              </div>
+              <button
+                className="btn-primary text-sm"
+                disabled={creatingGame || !newGameName}
+                onClick={async () => {
+                  setCreatingGame(true);
+                  const r = await fetch('/api/games', {
+                    method: 'POST',
+                    headers: headers(),
+                    body: JSON.stringify({ name: newGameName, startYear: newGameYear, contentMode: newGameContent, setupMode: newGameSetup }),
+                  });
+                  const d = await r.json();
+                  if (r.ok) {
+                    alert(`Game created! ID: ${d.id}\nShare link: ${window.location.origin}/login?game=${d.id}`);
+                    setNewGameName('');
+                  } else {
+                    alert(`Failed: ${d.error}`);
+                  }
+                  setCreatingGame(false);
+                }}
+              >
+                {creatingGame ? 'Creating...' : 'Create Game'}
+              </button>
             </div>
           </div>
         )}
@@ -362,44 +597,6 @@ export default function GMPage() {
           </div>
         )}
 
-        {/* CODES */}
-        {tab === 'codes' && (
-          <div className="space-y-4">
-            <div className="flex gap-3">
-              <button className="btn-primary" onClick={autoGenerateCodes}>Auto-Generate Codes</button>
-              <button className="btn-ghost" onClick={resetCodes}>Reset All (Mark Unused)</button>
-            </div>
-
-            <div className="card space-y-3">
-              <p className="label">Add Custom Code</p>
-              <div className="flex gap-3">
-                <input className="input font-mono text-sm" placeholder="CODE-XXXX" value={newCode} onChange={e => setNewCode(e.target.value.toUpperCase())} />
-                <select className="input text-sm w-48" value={newCodePlayer} onChange={e => setNewCodePlayer(e.target.value)}>
-                  <option value="">Select player...</option>
-                  {activePlayers.map(p => <option key={p.name} value={p.name}>{p.name} ({p.empire})</option>)}
-                </select>
-                <button className="btn-primary" onClick={addCode}>Add</button>
-              </div>
-            </div>
-
-            <div className="card">
-              <p className="label mb-3">Current Codes ({Object.keys(codes).length})</p>
-              <div className="space-y-2">
-                {Object.entries(codes).map(([code, data]) => (
-                  <div key={code} className="flex items-center gap-3 text-sm">
-                    <code className="font-mono px-2 py-1 rounded text-xs" style={{ background: 'var(--surface2)', color: 'var(--accent)' }}>{code}</code>
-                    <span>{data.player}</span>
-                    <span className={`badge ml-auto ${data.used ? 'badge-neutral' : 'badge-success'}`} style={{ fontSize: '0.6rem' }}>
-                      {data.used ? 'USED' : 'ACTIVE'}
-                    </span>
-                  </div>
-                ))}
-                {Object.keys(codes).length === 0 && <p style={{ color: 'var(--text2)' }} className="text-sm">No codes. Click Auto-Generate.</p>}
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* PROCESSING */}
         {tab === 'processing' && (
           <div className="space-y-4">
@@ -415,13 +612,68 @@ export default function GMPage() {
               />
             </div>
 
+            {/* Processing time estimate */}
+            {!processing && processLog.length === 0 && (
+              <div className="card" style={{ borderColor: 'var(--accent)', background: 'rgba(0,212,255,0.05)' }}>
+                <p className="label mb-2">Estimated Processing Time</p>
+                <p className="text-sm font-mono" style={{ color: 'var(--accent)' }}>
+                  ~{Math.ceil((45 + activePlayers.length * 9) / 60)} minutes
+                </p>
+                <p className="text-xs mt-1" style={{ color: 'var(--text2)' }}>
+                  {activePlayers.length} empires × ~9s advisor reports + ~45s world summary + PK document
+                </p>
+                <p className="text-xs mt-1" style={{ color: 'var(--text2)' }}>
+                  Do not close this window during processing.
+                </p>
+              </div>
+            )}
+
+            {/* War chest + cooldown status */}
+            {warChest && (
+              <div className="flex gap-4 text-sm flex-wrap">
+                <span style={{ color: warChestReady ? 'var(--success)' : 'var(--danger)' }}>
+                  {warChestReady ? '✓' : '✗'} War Chest: ${warChest.balance.toFixed(2)} / ${warChest.threshold.toFixed(2)}
+                </span>
+                <span style={{ color: cooldownReady ? 'var(--success)' : 'var(--danger)' }}>
+                  {cooldownReady ? '✓ Ready to process' : `⏱ Cooldown: ${cooldownHours}h ${cooldownMins}m`}
+                </span>
+              </div>
+            )}
+
+            {/* Live log */}
             {processLog.length > 0 && (
               <div className="card font-mono text-xs space-y-1" style={{ background: 'var(--surface2)' }}>
                 {processLog.map((l, i) => (
-                  <div key={i} style={{ color: l.startsWith('✓') ? 'var(--success)' : l.startsWith('✗') ? 'var(--danger)' : l.startsWith('⚠️') ? 'var(--warning)' : 'var(--text2)' }}>
+                  <div key={i} style={{ color: l.startsWith('✓') ? 'var(--success)' : l.startsWith('✗') ? 'var(--danger)' : l.startsWith('⚠️') ? '#f59e0b' : 'var(--text2)' }}>
                     {l}
                   </div>
                 ))}
+              </div>
+            )}
+
+            {/* Advisor progress bar */}
+            {processing && advisorProgress.total > 0 && (
+              <div className="card space-y-2">
+                <p className="label text-xs">Advisor Reports: {advisorProgress.index}/{advisorProgress.total}</p>
+                <div className="rounded-full overflow-hidden" style={{ height: 6, background: 'var(--border)' }}>
+                  <div
+                    className="h-full rounded-full transition-all duration-300"
+                    style={{ width: `${(advisorProgress.index / advisorProgress.total) * 100}%`, background: 'var(--accent)' }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Live streaming text */}
+            {streamingText && (
+              <div className="card space-y-2">
+                <p className="label text-xs" style={{ color: 'var(--accent)' }}>
+                  {streamingStep === 1 ? 'World Summary' : streamingStep === 2 ? 'Perfect Knowledge' : 'Streaming...'} — live output
+                </p>
+                <div className="font-mono text-xs leading-relaxed overflow-y-auto whitespace-pre-wrap" style={{ maxHeight: 240, color: 'var(--text2)' }}>
+                  {streamingText}
+                  <span style={{ opacity: 0.6 }}>▊</span>
+                </div>
               </div>
             )}
 
@@ -430,9 +682,15 @@ export default function GMPage() {
             <button
               className="btn-primary text-base py-3 px-8"
               onClick={processTurn}
-              disabled={processing}
+              disabled={processing || !cooldownReady || !warChestReady}
             >
-              {processing ? 'Processing... (do not close this page)' : `Initiate Turn ${year} Processing`}
+              {processing
+                ? `Processing Turn ${year}... do not close this page`
+                : !warChestReady
+                ? `War Chest insufficient ($${warChest?.balance.toFixed(2)} / $${warChest?.threshold.toFixed(2)})`
+                : !cooldownReady
+                ? `Cooldown: ${cooldownHours}h ${cooldownMins}m remaining`
+                : `Initiate Turn ${year} Processing`}
             </button>
           </div>
         )}
@@ -507,7 +765,7 @@ export default function GMPage() {
                   <option value="">Select empire...</option>
                   {players.map(p => <option key={p.name} value={p.empire}>{p.empire} ({p.name})</option>)}
                 </select>
-                <input className="input text-sm" placeholder="New password" value={resetPasswordValue} onChange={e => setResetPasswordValue(e.target.value)} />
+                <input className="input text-sm" placeholder="New password" value={resetPasswordValue} onChange={e => setResetPasswordValue(e.target.value)} autoCapitalize="none" autoCorrect="off" spellCheck={false} />
                 <button className="btn-primary" onClick={resetPassword}>Reset</button>
               </div>
             </div>
@@ -648,6 +906,77 @@ export default function GMPage() {
               <p className="label mb-3">Current Map</p>
               <WorldMap territories={territories} mode="territories" height={300} />
             </div>
+          </div>
+        )}
+
+        {/* WAR CHEST */}
+        {tab === 'warchest' && (
+          <div className="space-y-4">
+            {warChest && (
+              <>
+                <div className="card space-y-3">
+                  <p className="label">Community War Chest</p>
+                  <div className="flex items-end gap-4 flex-wrap">
+                    <div>
+                      <p className="text-3xl font-bold display-font" style={{ color: 'var(--accent)' }}>
+                        ${warChest.balance.toFixed(2)}
+                      </p>
+                      <p className="text-sm" style={{ color: 'var(--text2)' }}>of ${warChest.threshold.toFixed(2)} threshold</p>
+                    </div>
+                    <div className="flex-1 min-w-40">
+                      <div className="rounded-full overflow-hidden" style={{ height: 8, background: 'var(--border)' }}>
+                        <div
+                          className="h-full rounded-full transition-all"
+                          style={{
+                            width: `${Math.min(100, (warChest.balance / Math.max(0.01, warChest.threshold)) * 100)}%`,
+                            background: warChest.balance >= warChest.threshold ? 'var(--success)' : 'var(--accent)',
+                          }}
+                        />
+                      </div>
+                      <p className="text-xs mt-1" style={{ color: 'var(--text2)' }}>
+                        {warChest.balance >= warChest.threshold
+                          ? '✓ Threshold met — turn can run'
+                          : `$${(warChest.threshold - warChest.balance).toFixed(2)} more needed`}
+                      </p>
+                    </div>
+                  </div>
+                  {warChest.lastTurnCost > 0 && (
+                    <p className="text-xs" style={{ color: 'var(--text2)' }}>Last turn cost: ${warChest.lastTurnCost.toFixed(4)}</p>
+                  )}
+                </div>
+
+                <div className="card space-y-3">
+                  <p className="label">Add to War Chest (Manual Deposit)</p>
+                  <div className="flex gap-3 flex-wrap">
+                    <input className="input text-sm flex-1" type="number" min="0.01" step="0.01" placeholder="Amount ($)" value={wcAmount} onChange={e => setWcAmount(e.target.value)} />
+                    <input className="input text-sm flex-1" placeholder="Contributor name (optional)" value={wcContributor} onChange={e => setWcContributor(e.target.value)} />
+                    <button className="btn-primary" onClick={addFunds} disabled={wcSaving || !wcAmount}>
+                      {wcSaving ? 'Adding...' : 'Add Funds'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="card space-y-2">
+                  <p className="label mb-3">Contribution History</p>
+                  {warChest.contributions.length === 0 && (
+                    <p className="text-sm" style={{ color: 'var(--text2)' }}>No contributions yet.</p>
+                  )}
+                  {[...warChest.contributions].reverse().slice(0, 20).map((c, i) => (
+                    <div key={i} className="flex items-center gap-3 text-sm py-1" style={{ borderBottom: '1px solid var(--border)' }}>
+                      <span className="flex-1">{c.name}</span>
+                      <span style={{ color: 'var(--success)' }}>+${Number(c.amount).toFixed(2)}</span>
+                      <span className="text-xs" style={{ color: 'var(--text2)' }}>{new Date(c.timestamp).toLocaleDateString()}</span>
+                      <span className="badge badge-neutral" style={{ fontSize: '0.55rem' }}>{c.method}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+            {!warChest && (
+              <div className="card">
+                <p className="text-sm" style={{ color: 'var(--text2)' }}>Loading war chest data...</p>
+              </div>
+            )}
           </div>
         )}
 

@@ -90,8 +90,8 @@ await write('game:state', {
   currentYear: 2032,
   theme: 'dark-military',
   biddingOpen: false,
-  turnOpen: false,
-  processingComplete: true,
+  turnOpen: true,
+  processingComplete: false,
 });
 
 // ─── PLAYERS ─────────────────────────────────────────────────────────────────
@@ -362,6 +362,27 @@ await writeIfMissing('turn:2030:summary', {
   publicSummary: `TURN 5 — 2030 WORLD SUMMARY\n\nYe abdicated and was absorbed by LegoLand. Eagle's Eye reached peak power. The Not See Empire launched its first east coast invasion. IKEA offered peace talks as tensions rose globally.`,
   perfectKnowledge: `TURN 5 — 2030 PERFECT KNOWLEDGE\n\nYe (Robby) eliminated — absorbed into LegoLand (Aiden gains Pakistan). Eagle's Eye at peak territorial control. Not See begins east coast Eagle's Eye invasion. Noobian EMP program enters development. IKEA bridge at 70%.`,
 });
+
+// ─── WAR CHEST ─────────────────────────────────────────────────────────────
+await writeIfMissing('war:chest', {
+  balance: 0,
+  threshold: 14 * 0.25, // 14 active players × $0.25
+  contributions: [],
+  lastTurnCost: 0,
+  lastUpdated: Date.now(),
+});
+
+// ─── GAMES INDEX ──────────────────────────────────────────────────────────
+await writeIfMissing('games:index', [{
+  id: 's2',
+  name: 'Season 2 — Finale',
+  startYear: 2032,
+  contentMode: 'unrestricted',
+  setupMode: 'bidding',
+  warChestPerPlayer: 0.25,
+  createdAt: Date.now(),
+  status: 'active',
+}]);
 
 // ─── INITIAL CHAT MESSAGE ─────────────────────────────────────────────────────
 const welcomeMsg = {
