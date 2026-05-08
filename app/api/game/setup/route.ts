@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'GM auth required' }, { status: 401 });
   }
 
-  const { name, empire, password } = await req.json();
+  const { name, empire, password, email } = await req.json();
   if (!name || !empire || !password) {
     return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
   }
@@ -29,9 +29,26 @@ export async function POST(req: NextRequest) {
 
   const color = PLAYER_COLORS[players.length % PLAYER_COLORS.length];
   const passwordHash = await hashPassword(password);
-  const newPlayer: Player = { name, empire, passwordHash, color, status: 'active', territories: [] };
+  const newPlayer: Player = { name, empire, email: email || undefined, passwordHash, color, status: 'active', territories: [] };
   players.push(newPlayer);
   await dbSet(k('game:players'), players);
+
+  // Send notification email
+  if (process.env.RESEND_API_KEY) {
+    const emailBody = email
+      ? `New empire registered.<br><br><b>Player:</b> ${name}<br><b>Empire:</b> ${empire}<br><b>Email:</b> ${email}`
+      : `New empire registered.<br><br><b>Player:</b> ${name}<br><b>Empire:</b> ${empire}<br><i>No email provided.</i>`;
+    fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: 'Empires <onboarding@resend.dev>',
+        to: ['stanleyloomis451@gmail.com'],
+        subject: `New Empire Joined: ${empire} (${name})`,
+        html: emailBody,
+      }),
+    }).catch(e => console.error('Email notification failed:', e));
+  }
 
   return NextResponse.json({ success: true, color, empire, name });
 }

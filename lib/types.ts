@@ -1,6 +1,7 @@
 export interface Player {
   name: string;
   empire: string;
+  email?: string;
   passwordHash: string;
   color: string;
   status: 'active' | 'eliminated';

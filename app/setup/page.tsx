@@ -34,6 +34,7 @@ export default function SetupPage() {
   const [newPlayerName, setNewPlayerName] = useState('');
   const [newEmpireName, setNewEmpireName] = useState('');
   const [newEmpirePassword, setNewEmpirePassword] = useState('');
+  const [newPlayerEmail, setNewPlayerEmail] = useState('');
   const [players, setPlayers] = useState<{ name: string; empire: string; color: string }[]>([]);
   const [registering, setRegistering] = useState(false);
 
@@ -97,10 +98,10 @@ export default function SetupPage() {
     const r = await fetch('/api/game/setup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${gmPassword}` },
-      body: JSON.stringify({ name: newPlayerName, empire: newEmpireName, password: newEmpirePassword }),
+      body: JSON.stringify({ name: newPlayerName, empire: newEmpireName, password: newEmpirePassword, email: newPlayerEmail }),
     });
     if (r.ok) {
-      setNewPlayerName(''); setNewEmpireName(''); setNewEmpirePassword('');
+      setNewPlayerName(''); setNewEmpireName(''); setNewEmpirePassword(''); setNewPlayerEmail('');
       loadPlayers();
     } else {
       const d = await r.json();
@@ -301,6 +302,7 @@ export default function SetupPage() {
                   <input className="input text-sm" placeholder="Player name" value={newPlayerName} onChange={e => setNewPlayerName(e.target.value)} />
                   <input className="input text-sm" placeholder="Empire name" value={newEmpireName} onChange={e => setNewEmpireName(e.target.value)} />
                   <input className="input text-sm" placeholder="Empire password (tell to player)" value={newEmpirePassword} onChange={e => setNewEmpirePassword(e.target.value)} />
+                  <input className="input text-sm" type="email" placeholder="Player email (optional)" value={newPlayerEmail} onChange={e => setNewPlayerEmail(e.target.value)} />
                   <button className="btn-primary w-full text-sm" onClick={registerPlayer} disabled={registering}>
                     {registering ? 'Registering...' : 'Register Empire'}
                   </button>
