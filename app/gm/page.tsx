@@ -32,6 +32,10 @@ export default function GMPage() {
   const [resetPasswordTarget, setResetPasswordTarget] = useState('');
   const [resetPasswordValue, setResetPasswordValue] = useState('');
   const [turnOpen, setTurnOpen] = useState(false);
+  const [archive, setArchive] = useState<number[]>([]);
+  const [historyYear, setHistoryYear] = useState<number | null>(null);
+  const [historyPK, setHistoryPK] = useState('');
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [selectedCountry, setSelectedCountry] = useState('');
   const [assignEmpire, setAssignEmpire] = useState('');
   const [assignStatus, setAssignStatus] = useState<'active' | 'contested' | 'ungoverned' | 'remove'>('active');
@@ -74,6 +78,8 @@ export default function GMPage() {
     if (mapR.ok) { const d = await mapR.json(); setTerritories(d.territories ?? {}); }
     if (actionsR.ok) { const d = await actionsR.json(); setActions(d.actions ?? {}); }
     if (codesR.ok) { const d = await codesR.json(); setCodes(d.codes ?? {}); }
+    const archR = await fetch('/api/game/archive');
+    if (archR.ok) { const d = await archR.json(); setArchive(d.archive ?? []); }
 
     // Load prev PK
     const pkR = await fetch(`/api/turns/${(await stateR.clone().json().catch(() => ({ currentYear: 2032 }))).currentYear - 1 || year - 1}/perfect-knowledge`, { headers: headers() });
@@ -179,6 +185,16 @@ export default function GMPage() {
     });
     alert('Password reset successfully');
     setResetPasswordTarget(''); setResetPasswordValue('');
+  }
+
+  async function loadHistoryPK(yr: number) {
+    setHistoryYear(yr);
+    setHistoryLoading(true);
+    setHistoryPK('');
+    const r = await fetch(`/api/turns/${yr}/perfect-knowledge`, { headers: headers() });
+    if (r.ok) { const d = await r.json(); setHistoryPK(d.perfectKnowledge ?? 'No Perfect Knowledge document found.'); }
+    else setHistoryPK('No records found for this year.');
+    setHistoryLoading(false);
   }
 
   async function runMapUpdate() {
@@ -421,16 +437,47 @@ export default function GMPage() {
           </div>
         )}
 
-        {/* PERFECT KNOWLEDGE */}
+        {/* PERFECT KNOWLEDGE HISTORY */}
         {tab === 'pk' && (
-          <div className="card space-y-3">
-            <p className="label">Perfect Knowledge — Year {year - 1}</p>
-            {prevPK ? (
-              <div className="text-sm font-mono leading-relaxed max-h-screen overflow-y-auto whitespace-pre-wrap" style={{ color: 'var(--text)' }}>
-                {prevPK}
+          <div className="space-y-4">
+            <div className="card space-y-3">
+              <p className="label">Historical Archive — Perfect Knowledge</p>
+              <p className="text-xs" style={{ color: 'var(--text2)' }}>Select any past year to view its Perfect Knowledge document.</p>
+              <div className="flex gap-2 flex-wrap">
+                {[...archive].sort((a, b) => b - a).map(yr => (
+                  <button
+                    key={yr}
+                    className={historyYear === yr ? 'btn-primary' : 'btn-ghost'}
+                    style={{ fontSize: '0.75rem', padding: '0.35rem 0.85rem' }}
+                    onClick={() => loadHistoryPK(yr)}
+                  >
+                    {yr}
+                  </button>
+                ))}
+                {archive.length === 0 && <p className="text-sm" style={{ color: 'var(--text2)' }}>No archived years yet.</p>}
               </div>
-            ) : (
-              <p style={{ color: 'var(--text2)' }}>No Perfect Knowledge document for Year {year - 1}.</p>
+            </div>
+
+            {historyYear && (
+              <div className="card space-y-3">
+                <p className="label">Perfect Knowledge — Year {historyYear}</p>
+                {historyLoading ? (
+                  <p className="text-sm" style={{ color: 'var(--text2)' }}>Loading...</p>
+                ) : (
+                  <div className="text-sm font-mono leading-relaxed overflow-y-auto whitespace-pre-wrap" style={{ color: 'var(--text)', maxHeight: '70vh' }}>
+                    {historyPK}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {!historyYear && prevPK && (
+              <div className="card space-y-3">
+                <p className="label">Perfect Knowledge — Year {year - 1} (latest)</p>
+                <div className="text-sm font-mono leading-relaxed overflow-y-auto whitespace-pre-wrap" style={{ color: 'var(--text)', maxHeight: '70vh' }}>
+                  {prevPK}
+                </div>
+              </div>
             )}
           </div>
         )}

@@ -33,6 +33,27 @@ function safeKey(key) {
   return key.replace(/[^a-zA-Z0-9_\-]/g, '_');
 }
 
+async function exists(key) {
+  if (useKV) {
+    const res = await fetch(`${KV_URL}/pipeline`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${KV_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify([['EXISTS', key]]),
+    });
+    const data = await res.json();
+    return data[0]?.result === 1;
+  }
+  return fs.existsSync(path.join(DATA_DIR, safeKey(key) + '.json'));
+}
+
+async function writeIfMissing(key, value) {
+  if (await exists(key)) {
+    console.log(`  ~ ${key} (skipped — already exists)`);
+    return;
+  }
+  return write(key, value);
+}
+
 async function write(key, value) {
   if (useKV) {
     const res = await fetch(`${KV_URL}/pipeline`, {
@@ -311,9 +332,35 @@ Emerging Flashpoints & Opportunities for 2032
 
 End of Turn 6 — 2031 World Summary.`;
 
-await write('turn:2031:summary', {
+await await writeIfMissing('turn:2031:summary', {
   publicSummary: pk2031,
   perfectKnowledge: pk2031,
+});
+
+// ─── HISTORICAL SUMMARIES (2026–2030) ─────────────────────────────────────────
+await writeIfMissing('turn:2026:summary', {
+  publicSummary: `TURN 1 — 2026 WORLD SUMMARY\n\nThe empires divided the world in the opening year. Wall of Pongs was the first empire eliminated. Initial territorial claims were staked across every continent. The great powers jostled for position as alliances began to form.`,
+  perfectKnowledge: `TURN 1 — 2026 PERFECT KNOWLEDGE\n\nWall of Pongs (Bus Michael) eliminated in Year 1. Opening territorial grabs locked in the early map. No major wars yet — mostly posturing, diplomacy, and land claims. Amazon and Eagle's Eye both emerge as early powerhouses.`,
+});
+
+await writeIfMissing('turn:2027:summary', {
+  publicSummary: `TURN 2 — 2027 WORLD SUMMARY\n\nThe Mole Kingdom fell this year, the second empire to be eliminated. Nuclear rhetoric escalated. Eagle's Eye consolidated North America while Amazon expanded south. The Soviet Reunion began organizing.`,
+  perfectKnowledge: `TURN 2 — 2027 PERFECT KNOWLEDGE\n\nMole Kingdom (Devin) eliminated. First nuclear threats made but not acted upon. Eagle's Eye dominates the western hemisphere. IKEA begins bridge construction project. Logan builds nuclear stockpile quietly.`,
+});
+
+await writeIfMissing('turn:2028:summary', {
+  publicSummary: `TURN 3 — 2028 WORLD SUMMARY\n\nA year of consolidation and secret arms races. No empires were eliminated but several wars were narrowly averted. The Not See Empire began its biological weapons program. IKEA's bridge passed 50% completion.`,
+  perfectKnowledge: `TURN 3 — 2028 PERFECT KNOWLEDGE\n\nNo eliminations. Not See begins Lil Frank bioweapon development. Logan reaches 150+ warheads. Amazon's Optimus PRIME platform enters development. Philippeah advances space program secretly.`,
+});
+
+await writeIfMissing('turn:2029:summary', {
+  publicSummary: `TURN 4 — 2029 WORLD SUMMARY\n\nLasha's Empire was eliminated. The Soviet Reunion formally declared. Eagle's Eye and Not See began their proxy conflicts. Peace treaties between Temu's Empire and neighbors held.`,
+  perfectKnowledge: `TURN 4 — 2029 PERFECT KNOWLEDGE\n\nLasha's Empire eliminated. Soviet Reunion founded (Noah, Logan, Nolan). Eagle's Eye and Not See clash over east Asia. Temu's Empire signs non-aggression pacts. Arby's (then Grat Zero) begins downfall.`,
+});
+
+await writeIfMissing('turn:2030:summary', {
+  publicSummary: `TURN 5 — 2030 WORLD SUMMARY\n\nYe abdicated and was absorbed by LegoLand. Eagle's Eye reached peak power. The Not See Empire launched its first east coast invasion. IKEA offered peace talks as tensions rose globally.`,
+  perfectKnowledge: `TURN 5 — 2030 PERFECT KNOWLEDGE\n\nYe (Robby) eliminated — absorbed into LegoLand (Aiden gains Pakistan). Eagle's Eye at peak territorial control. Not See begins east coast Eagle's Eye invasion. Noobian EMP program enters development. IKEA bridge at 70%.`,
 });
 
 // ─── INITIAL CHAT MESSAGE ─────────────────────────────────────────────────────
