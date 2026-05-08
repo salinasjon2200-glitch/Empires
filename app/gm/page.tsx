@@ -61,6 +61,10 @@ export default function GMPage() {
   const [randomPool, setRandomPool] = useState<string[]>([]);
   const [randomAssignments, setRandomAssignments] = useState<Array<{ playerName: string; empire: string; color: string; country: string }>>([]);
   const [randomizing, setRandomizing] = useState(false);
+  const [worldNews, setWorldNews] = useState('');
+  const [worldNewsYear, setWorldNewsYear] = useState<number | null>(null);
+  const [worldNewsSaving, setWorldNewsSaving] = useState(false);
+  const [worldNewsSaved, setWorldNewsSaved] = useState(false);
 
   const headers = useCallback(() => ({ 'Authorization': `Bearer ${gmPassword}`, 'Content-Type': 'application/json', 'X-Game-ID': currentGameId }), [gmPassword, currentGameId]);
 
@@ -107,11 +111,13 @@ export default function GMPage() {
     const archR = await fetch('/api/game/archive');
     if (archR.ok) { const d = await archR.json(); setArchive(d.archive ?? []); }
 
-    // Load prev PK using the year extracted above (stateR body already consumed — cannot clone)
+    // Load prev PK and world news using the year extracted above (stateR body already consumed — cannot clone)
     if (stateR.ok) {
       const currentYear = (await fetch('/api/game/state').then(r => r.json()).catch(() => ({ currentYear: 2032 }))).currentYear ?? 2032;
       const pkR = await fetch(`/api/turns/${currentYear - 1}/perfect-knowledge`, { headers: headers() });
       if (pkR.ok) { const d = await pkR.json(); setPrevPK(d.perfectKnowledge ?? ''); }
+      const newsR = await fetch(`/api/turns/${currentYear - 1}/summary`);
+      if (newsR.ok) { const d = await newsR.json(); setWorldNews(d.publicSummary ?? ''); setWorldNewsYear(currentYear - 1); }
     }
   }, [authed, headers]);
 
@@ -603,6 +609,48 @@ export default function GMPage() {
         {/* PROCESSING */}
         {tab === 'processing' && (
           <div className="space-y-4">
+
+            {/* World News Card */}
+            <div className="card space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="label">World News Report — Year {worldNewsYear ?? year - 1}</p>
+                <div className="flex items-center gap-2">
+                  {worldNewsSaved && <span className="text-xs" style={{ color: 'var(--accent)' }}>✓ Saved</span>}
+                  <button
+                    className="btn-primary text-xs"
+                    style={{ padding: '0.35rem 0.85rem' }}
+                    disabled={worldNewsSaving}
+                    onClick={async () => {
+                      const yr = worldNewsYear ?? year - 1;
+                      setWorldNewsSaving(true);
+                      setWorldNewsSaved(false);
+                      await fetch(`/api/turns/${yr}/summary`, {
+                        method: 'POST',
+                        headers: headers(),
+                        body: JSON.stringify({ publicSummary: worldNews }),
+                      });
+                      setWorldNewsSaving(false);
+                      setWorldNewsSaved(true);
+                      setTimeout(() => setWorldNewsSaved(false), 3000);
+                    }}
+                  >
+                    {worldNewsSaving ? 'Saving...' : 'Save'}
+                  </button>
+                </div>
+              </div>
+              <p className="text-xs" style={{ color: 'var(--text2)' }}>
+                This is what players see at <strong>/news</strong>. Paste the World News Report here (markdown supported). This is NOT the Perfect Knowledge document.
+              </p>
+              <p className="text-xs" style={{ color: 'var(--text2)' }}>{worldNews.length.toLocaleString()} characters</p>
+              <textarea
+                className="input font-mono text-xs"
+                style={{ minHeight: 300 }}
+                value={worldNews}
+                onChange={e => setWorldNews(e.target.value)}
+                placeholder="Paste the World News Report (public summary) for players to read..."
+              />
+            </div>
+
             <div className="card space-y-4">
               <div className="flex items-center justify-between">
                 <p className="label">Previous Perfect Knowledge Document</p>

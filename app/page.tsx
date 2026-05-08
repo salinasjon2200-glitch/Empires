@@ -39,6 +39,10 @@ export default function LandingPage() {
             <Link href={phasePaths[phase] ?? '/'} className="btn-ghost">Enter Game →</Link>
           </div>
           <div className="pt-2">
+            <Link href="/news" className="text-xs" style={{ color: 'var(--text2)' }}>World Report</Link>
+            {' · '}
+            <Link href="/map" className="text-xs" style={{ color: 'var(--text2)' }}>World Map</Link>
+            {' · '}
             <Link href="/vote" className="text-xs" style={{ color: 'var(--text2)' }}>Theme Vote</Link>
             {' · '}
             <Link href="/gm" className="text-xs" style={{ color: 'var(--text2)' }}>GM Dashboard</Link>
