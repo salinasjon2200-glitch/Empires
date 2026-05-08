@@ -8,7 +8,7 @@ const WorldMap = dynamic(() => import('@/components/WorldMap'), { ssr: false });
 interface Player { name: string; empire: string; color: string; status: string; passwordHash: string; territories: string[]; eliminatedYear?: number; }
 interface TurnCode { used: boolean; player: string; usedAt?: number; }
 
-type Tab = 'overview' | 'actions' | 'codes' | 'processing' | 'pk' | 'players' | 'chats';
+type Tab = 'overview' | 'actions' | 'codes' | 'processing' | 'pk' | 'players' | 'chats' | 'mapupdate';
 
 export default function GMPage() {
   const [gmPassword, setGmPassword] = useState('');
@@ -36,6 +36,9 @@ export default function GMPage() {
   const [assignEmpire, setAssignEmpire] = useState('');
   const [assignStatus, setAssignStatus] = useState<'active' | 'contested' | 'ungoverned' | 'remove'>('active');
   const [mapSaving, setMapSaving] = useState(false);
+  const [mapUpdateDesc, setMapUpdateDesc] = useState('');
+  const [mapUpdating, setMapUpdating] = useState(false);
+  const [mapUpdateLog, setMapUpdateLog] = useState('');
 
   const headers = useCallback(() => ({ 'Authorization': `Bearer ${gmPassword}`, 'Content-Type': 'application/json' }), [gmPassword]);
 
@@ -178,6 +181,26 @@ export default function GMPage() {
     setResetPasswordTarget(''); setResetPasswordValue('');
   }
 
+  async function runMapUpdate() {
+    if (!mapUpdateDesc.trim()) return;
+    setMapUpdating(true);
+    setMapUpdateLog('Sending to AI...');
+    const r = await fetch('/api/map/update', {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({ description: mapUpdateDesc }),
+    });
+    const d = await r.json();
+    if (r.ok) {
+      setMapUpdateLog('Map updated successfully.');
+      setMapUpdateDesc('');
+      loadAll();
+    } else {
+      setMapUpdateLog(`Error: ${d.error ?? 'Unknown error'}`);
+    }
+    setMapUpdating(false);
+  }
+
   const tabs: [Tab, string][] = [
     ['overview', 'Overview'],
     ['actions', 'Actions'],
@@ -186,6 +209,7 @@ export default function GMPage() {
     ['pk', 'Perfect Knowledge'],
     ['players', 'Empire Management'],
     ['chats', 'Intercept All Transmissions'],
+    ['mapupdate', 'Map Update'],
   ];
 
   if (!authed) {
@@ -545,6 +569,41 @@ export default function GMPage() {
             </div>
           </div>
         )}
+
+        {/* MAP UPDATE */}
+        {tab === 'mapupdate' && (
+          <div className="space-y-4">
+            <div className="card space-y-4">
+              <p className="label">AI Map Update</p>
+              <p className="text-sm" style={{ color: 'var(--text2)' }}>
+                Describe territorial changes in plain English. The AI will update the map without processing a full turn.
+              </p>
+              <p className="text-xs" style={{ color: 'var(--text2)' }}>
+                Examples: "Germany is now contested. Logan absorbs eastern Russia. IKEA gains Norway."
+              </p>
+              <textarea
+                className="input font-mono text-sm"
+                style={{ minHeight: 180 }}
+                placeholder="Describe the territorial changes..."
+                value={mapUpdateDesc}
+                onChange={e => setMapUpdateDesc(e.target.value)}
+              />
+              {mapUpdateLog && (
+                <p className="text-sm" style={{ color: mapUpdateLog.startsWith('Error') ? 'var(--danger)' : 'var(--success)' }}>
+                  {mapUpdateLog}
+                </p>
+              )}
+              <button className="btn-primary" onClick={runMapUpdate} disabled={mapUpdating || !mapUpdateDesc.trim()}>
+                {mapUpdating ? 'Updating map...' : 'Update Map with AI'}
+              </button>
+            </div>
+            <div className="card">
+              <p className="label mb-3">Current Map</p>
+              <WorldMap territories={territories} mode="territories" height={300} />
+            </div>
+          </div>
+        )}
+
       </div>
 
       <ChatSidebar sessionToken={null} playerName="Game Master" empireName="GM" color="#ffffff" gmPassword={gmPassword} />
