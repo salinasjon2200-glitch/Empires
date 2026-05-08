@@ -254,16 +254,14 @@ export default function ChatSidebar({ sessionToken, playerName, empireName, colo
                     </button>
                   </div>
                 ) : (
-                  <>
+                  <div className="flex flex-col flex-1 overflow-hidden">
                     <div className="px-3 py-2 flex items-center gap-2" style={{ borderBottom: '1px solid var(--border)' }}>
                       <button onClick={() => { setDirectTarget(''); setDirectMsgs([]); }} style={{ color: 'var(--text2)' }}>←</button>
                       <span className="text-sm font-semibold">{directTarget}</span>
                     </div>
                     <MessageList messages={directMsgs} />
-                    {sessionToken && (
-                      <MessageInput value={directInput} onChange={setDirectInput} onSend={sendDirect} placeholder="Diplomatic communiqué..." />
-                    )}
-                  </>
+                    <MessageInput value={directInput} onChange={setDirectInput} onSend={sendDirect} placeholder="Diplomatic communiqué..." />
+                  </div>
                 )}
               </>
             )}
