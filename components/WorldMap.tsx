@@ -1,11 +1,10 @@
 'use client';
-import { useState, useEffect } from 'react';
-import { ComposableMap, Geographies, Geography, Marker } from 'react-simple-maps';
-import { TerritoryMap, Bid, BidState } from '@/lib/types';
+import { useState } from 'react';
+import { ComposableMap, Geographies, Geography } from 'react-simple-maps';
+import { TerritoryMap, BidState } from '@/lib/types';
 
 const GEO_URL = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json';
 
-// Map from world-atlas country names to our game country names
 const COUNTRY_NAME_MAP: Record<string, string> = {
   'United States of America': 'United States',
   'Russian Federation': 'Russia',
@@ -23,9 +22,7 @@ const COUNTRY_NAME_MAP: Record<string, string> = {
 
 function matchCountry(geoName: string, territories: TerritoryMap | BidState): string | null {
   const mapped = COUNTRY_NAME_MAP[geoName] ?? geoName;
-  // Direct match
   if (territories[mapped]) return mapped;
-  // Partial match for split territories (e.g., "United States (West)")
   for (const key of Object.keys(territories)) {
     if (key.startsWith(mapped + ' (') || key === mapped) return key;
   }
@@ -37,15 +34,24 @@ interface WorldMapProps {
   bids?: BidState;
   mode?: 'territories' | 'bidding';
   height?: number;
+  onCountryClick?: (gameName: string) => void;
+  selectedCountry?: string;
 }
 
-export default function WorldMap({ territories = {}, bids = {}, mode = 'territories', height = 400 }: WorldMapProps) {
+export default function WorldMap({ territories = {}, bids = {}, mode = 'territories', height = 400, onCountryClick, selectedCountry }: WorldMapProps) {
   const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
 
+  function getGameName(atlasName: string): string {
+    const existingKey = matchCountry(atlasName, territories);
+    return existingKey ?? (COUNTRY_NAME_MAP[atlasName] ?? atlasName);
+  }
+
   function getColor(geoName: string): string {
+    const gameName = getGameName(geoName);
+    if (selectedCountry && gameName === selectedCountry) return '#00d4ff55';
     if (mode === 'bidding') {
       const key = matchCountry(geoName, bids);
-      if (key && bids[key]) return (bids[key] as any).color + 'b3';
+      if (key && bids[key]) return (bids[key] as { color: string }).color + 'b3';
       return '#1e3a5f';
     }
     const key = matchCountry(geoName, territories);
@@ -62,9 +68,11 @@ export default function WorldMap({ territories = {}, bids = {}, mode = 'territor
   }
 
   function getStroke(geoName: string): string {
+    const gameName = getGameName(geoName);
+    if (selectedCountry && gameName === selectedCountry) return '#00d4ff';
     if (mode === 'bidding') {
       const key = matchCountry(geoName, bids);
-      if (key && bids[key]) return (bids[key] as any).color;
+      if (key && bids[key]) return (bids[key] as { color: string }).color;
       return '#1e3a5f';
     }
     const key = matchCountry(geoName, territories);
@@ -79,7 +87,7 @@ export default function WorldMap({ territories = {}, bids = {}, mode = 'territor
     if (mode === 'bidding') {
       const key = matchCountry(geoName, bids);
       if (key && bids[key]) {
-        const b = bids[key] as any;
+        const b = bids[key] as { empireName: string; amount: number };
         return `${geoName} — Leader: ${b.empireName} (${b.amount} pts)`;
       }
       return `${geoName} — No bids`;
@@ -104,6 +112,7 @@ export default function WorldMap({ territories = {}, bids = {}, mode = 'territor
               const name = geo.properties.name;
               const color = getColor(name);
               const stroke = getStroke(name);
+              const clickable = !!onCountryClick;
               return (
                 <Geography
                   key={geo.rsmKey}
@@ -113,7 +122,7 @@ export default function WorldMap({ territories = {}, bids = {}, mode = 'territor
                   strokeWidth={0.5}
                   style={{
                     default: { outline: 'none' },
-                    hover: { fill: stroke, outline: 'none', cursor: 'pointer' },
+                    hover: { fill: clickable ? '#00d4ff33' : stroke, outline: 'none', cursor: clickable ? 'pointer' : 'default' },
                     pressed: { outline: 'none' },
                   }}
                   onMouseEnter={(evt) => {
@@ -122,6 +131,9 @@ export default function WorldMap({ territories = {}, bids = {}, mode = 'territor
                   onMouseLeave={() => setTooltip(null)}
                   onMouseMove={(evt) => {
                     setTooltip(t => t ? { ...t, x: evt.clientX, y: evt.clientY } : null);
+                  }}
+                  onClick={() => {
+                    if (onCountryClick) onCountryClick(getGameName(name));
                   }}
                 />
               );

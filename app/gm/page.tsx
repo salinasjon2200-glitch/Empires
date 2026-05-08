@@ -32,6 +32,10 @@ export default function GMPage() {
   const [resetPasswordTarget, setResetPasswordTarget] = useState('');
   const [resetPasswordValue, setResetPasswordValue] = useState('');
   const [turnOpen, setTurnOpen] = useState(false);
+  const [selectedCountry, setSelectedCountry] = useState('');
+  const [assignEmpire, setAssignEmpire] = useState('');
+  const [assignStatus, setAssignStatus] = useState<'active' | 'contested' | 'ungoverned' | 'remove'>('active');
+  const [mapSaving, setMapSaving] = useState(false);
 
   const headers = useCallback(() => ({ 'Authorization': `Bearer ${gmPassword}`, 'Content-Type': 'application/json' }), [gmPassword]);
 
@@ -142,6 +146,28 @@ export default function GMPage() {
     loadAll();
   }
 
+  async function saveTerritory() {
+    if (!selectedCountry) return;
+    setMapSaving(true);
+    const empire = activePlayers.find(p => p.empire === assignEmpire);
+    await fetch('/api/map/territories', {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({
+        country: selectedCountry,
+        empire: assignEmpire,
+        leader: empire?.name ?? '',
+        color: empire?.color ?? '#6b7280',
+        status: assignStatus,
+      }),
+    });
+    await loadAll();
+    setMapSaving(false);
+    setSelectedCountry('');
+    setAssignEmpire('');
+    setAssignStatus('active');
+  }
+
   async function resetPassword() {
     if (!resetPasswordTarget || !resetPasswordValue) return;
     await fetch('/api/game/reset-password', {
@@ -224,8 +250,50 @@ export default function GMPage() {
               <p className="text-sm mt-1" style={{ color: 'var(--text2)' }}>{Object.values(codes).filter(c => c.used).length} used</p>
             </div>
             <div className="lg:col-span-3 card">
-              <p className="label mb-3">World Map</p>
-              <WorldMap territories={territories} mode="territories" height={300} />
+              <p className="label mb-3">World Map — click a country to edit</p>
+              <WorldMap
+                territories={territories}
+                mode="territories"
+                height={300}
+                selectedCountry={selectedCountry}
+                onCountryClick={(name) => {
+                  setSelectedCountry(name);
+                  const existing = (territories as Record<string, { empire: string; status: string }>)[name];
+                  setAssignEmpire(existing?.empire ?? '');
+                  setAssignStatus((existing?.status as 'active' | 'contested' | 'ungoverned') ?? 'active');
+                }}
+              />
+              {selectedCountry && (
+                <div className="mt-4 p-3 rounded space-y-3" style={{ background: 'var(--surface2)', border: '1px solid var(--accent)' }}>
+                  <p className="label" style={{ color: 'var(--accent)' }}>Editing: {selectedCountry}</p>
+                  <div className="flex gap-3 flex-wrap items-end">
+                    <div className="flex-1 min-w-40">
+                      <label className="label">Status</label>
+                      <select className="input text-sm" value={assignStatus} onChange={e => setAssignStatus(e.target.value as typeof assignStatus)}>
+                        <option value="active">Active (owned)</option>
+                        <option value="contested">Contested</option>
+                        <option value="ungoverned">Ungoverned</option>
+                        <option value="remove">Remove from map</option>
+                      </select>
+                    </div>
+                    {assignStatus === 'active' && (
+                      <div className="flex-1 min-w-40">
+                        <label className="label">Assign to Empire</label>
+                        <select className="input text-sm" value={assignEmpire} onChange={e => setAssignEmpire(e.target.value)}>
+                          <option value="">— Select empire —</option>
+                          {activePlayers.map(p => (
+                            <option key={p.name} value={p.empire}>{p.empire} ({p.name})</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                    <button className="btn-primary" onClick={saveTerritory} disabled={mapSaving || (assignStatus === 'active' && !assignEmpire)}>
+                      {mapSaving ? 'Saving...' : 'Save'}
+                    </button>
+                    <button className="btn-ghost" onClick={() => setSelectedCountry('')}>Cancel</button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
