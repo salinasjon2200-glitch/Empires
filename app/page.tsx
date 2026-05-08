@@ -35,6 +35,7 @@ export default function LandingPage() {
           </div>
           <div className="flex gap-3 justify-center pt-2">
             <Link href="/login" className="btn-primary">Empire Login</Link>
+            <Link href="/join" className="btn-primary">Join Game</Link>
             <Link href={phasePaths[phase] ?? '/'} className="btn-ghost">Enter Game →</Link>
           </div>
           <div className="pt-2">

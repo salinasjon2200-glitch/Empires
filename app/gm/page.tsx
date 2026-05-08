@@ -743,6 +743,9 @@ export default function GMPage() {
         {/* PLAYERS */}
         {tab === 'players' && (
           <div className="space-y-4">
+            {/* Join password */}
+            <JoinPasswordCard gmPassword={gmPassword} currentGameId={currentGameId} />
+
             {/* Eliminate */}
             <div className="card space-y-3">
               <p className="label danger">Empire Status Management</p>
@@ -983,6 +986,78 @@ export default function GMPage() {
       </div>
 
       <ChatSidebar sessionToken={null} playerName="Game Master" empireName="GM" color="#ffffff" gmPassword={gmPassword} />
+    </div>
+  );
+}
+
+function JoinPasswordCard({ gmPassword, currentGameId }: { gmPassword: string; currentGameId: string }) {
+  const [joinPassword, setJoinPassword] = useState('');
+  const [current, setCurrent] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/game/state', { headers: { 'X-Game-ID': currentGameId } })
+      .then(r => r.json())
+      .then(s => setCurrent(s.joinPassword ?? null))
+      .catch(() => {});
+  }, [currentGameId]);
+
+  async function save() {
+    setSaving(true);
+    await fetch('/api/game/state', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${gmPassword}`, 'X-Game-ID': currentGameId },
+      body: JSON.stringify({ joinPassword }),
+    });
+    setCurrent(joinPassword);
+    setJoinPassword('');
+    setSaving(false);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }
+
+  async function disable() {
+    setSaving(true);
+    await fetch('/api/game/state', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${gmPassword}`, 'X-Game-ID': currentGameId },
+      body: JSON.stringify({ joinPassword: null }),
+    });
+    setCurrent(null);
+    setSaving(false);
+  }
+
+  return (
+    <div className="card space-y-3">
+      <p className="label">Player Self-Join</p>
+      <p className="text-xs" style={{ color: 'var(--text2)' }}>
+        Share this link + join code with players to let them register themselves.
+        They will pick 5 unclaimed starting territories.
+      </p>
+      <div className="flex gap-2 items-center text-xs p-2 rounded" style={{ background: 'var(--surface2)', color: 'var(--accent)' }}>
+        <span className="font-mono flex-1">{typeof window !== 'undefined' ? window.location.origin : ''}/join</span>
+      </div>
+      {current ? (
+        <div className="space-y-2">
+          <p className="text-xs" style={{ color: 'var(--success)' }}>
+            Join is <strong>open</strong>. Current code: <span className="font-mono">{current}</span>
+          </p>
+          <div className="flex gap-2">
+            <input className="input text-sm flex-1" placeholder="Set new code..." value={joinPassword} onChange={e => setJoinPassword(e.target.value)} />
+            <button className="btn-primary text-sm" onClick={save} disabled={saving || !joinPassword.trim()}>{saved ? '✓ Saved' : 'Update'}</button>
+            <button className="btn-danger text-sm" onClick={disable} disabled={saving}>Disable</button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <p className="text-xs" style={{ color: 'var(--text2)' }}>Join is currently <strong>disabled</strong>. Set a code to enable it.</p>
+          <div className="flex gap-2">
+            <input className="input text-sm flex-1" placeholder="Join code to share..." value={joinPassword} onChange={e => setJoinPassword(e.target.value)} />
+            <button className="btn-primary text-sm" onClick={save} disabled={saving || !joinPassword.trim()}>{saved ? '✓ Saved' : 'Enable Join'}</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

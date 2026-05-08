@@ -19,6 +19,7 @@ export interface GameState {
   processingComplete: boolean;
   lastTurnCompletedAt?: number;
   contentMode?: 'unrestricted' | 'school';
+  joinPassword?: string;
 }
 
 export interface GameInstance {
