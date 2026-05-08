@@ -26,8 +26,8 @@ export default function ChatSidebar({ sessionToken, playerName, empireName, colo
   const [directTarget, setDirectTarget] = useState('');
   const [directInput, setDirectInput] = useState('');
   const [directMsgs, setDirectMsgs] = useState<ChatMessage[]>([]);
-  const [directInputTarget, setDirectInputTarget] = useState('');
   const directAfter = useRef(0);
+  const [allPlayers, setAllPlayers] = useState<{ name: string; empire: string; color: string }[]>([]);
 
   // Groups
   const [groups, setGroups] = useState<Group[]>([]);
@@ -123,6 +123,13 @@ export default function ChatSidebar({ sessionToken, playerName, empireName, colo
     }).catch(() => {});
   }, [sessionToken, headers]);
 
+  // Load players for direct chat selector
+  useEffect(() => {
+    fetch('/api/game/players').then(r => r.json()).then(d => {
+      if (d.players) setAllPlayers(d.players);
+    }).catch(() => {});
+  }, []);
+
   async function sendPublic() {
     if (!pubInput.trim()) return;
     const body: Record<string, string> = { text: pubInput };
@@ -133,13 +140,24 @@ export default function ChatSidebar({ sessionToken, playerName, empireName, colo
   }
 
   async function sendDirect() {
-    if (!directInput.trim() || !directTarget) return;
+    if (!directInput.trim() || !directTarget || !sessionToken) return;
+    const text = directInput.trim();
+    setDirectInput('');
+    const optimistic: ChatMessage = {
+      id: 'tmp-' + Date.now(),
+      senderName: playerName ?? '',
+      empireName: empireName ?? '',
+      color: color ?? '#888',
+      text,
+      timestamp: Date.now(),
+    };
+    setDirectMsgs(prev => [...prev, optimistic]);
+    directAfter.current = Math.max(directAfter.current, optimistic.timestamp);
     await fetch('/api/chat/private', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}` },
-      body: JSON.stringify({ text: directInput, receiverName: directTarget }),
+      body: JSON.stringify({ text, receiverName: directTarget }),
     });
-    setDirectInput('');
   }
 
   async function sendGroup() {
@@ -240,24 +258,32 @@ export default function ChatSidebar({ sessionToken, playerName, empireName, colo
             {tab === 'direct' && (
               <>
                 {!directTarget ? (
-                  <div className="p-4 space-y-3">
-                    <p className="text-xs" style={{ color: 'var(--text2)' }}>Open a direct channel to another empire:</p>
-                    <input
-                      className="input text-sm"
-                      placeholder="Player name..."
-                      value={directInputTarget}
-                      onChange={e => setDirectInputTarget(e.target.value)}
-                      onKeyDown={e => e.key === 'Enter' && directInputTarget && setDirectTarget(directInputTarget)}
-                    />
-                    <button className="btn-primary w-full" onClick={() => directInputTarget && setDirectTarget(directInputTarget)}>
-                      Open Channel
-                    </button>
+                  <div className="p-4 space-y-2 overflow-y-auto flex-1">
+                    <p className="text-xs mb-3" style={{ color: 'var(--text2)' }}>Select an empire to open a direct channel:</p>
+                    {allPlayers.filter(p => p.name !== playerName).map(p => (
+                      <button
+                        key={p.name}
+                        className="w-full text-left px-3 py-2 rounded flex items-center gap-3 transition-colors"
+                        style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}
+                        onClick={() => setDirectTarget(p.name)}
+                      >
+                        <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: p.color }} />
+                        <div>
+                          <div className="text-sm font-semibold">{p.empire}</div>
+                          <div className="text-xs" style={{ color: 'var(--text2)' }}>{p.name}</div>
+                        </div>
+                      </button>
+                    ))}
+                    {allPlayers.filter(p => p.name !== playerName).length === 0 && (
+                      <p className="text-xs" style={{ color: 'var(--text2)' }}>No other players found.</p>
+                    )}
                   </div>
                 ) : (
                   <div className="flex flex-col flex-1 overflow-hidden">
                     <div className="px-3 py-2 flex items-center gap-2" style={{ borderBottom: '1px solid var(--border)' }}>
                       <button onClick={() => { setDirectTarget(''); setDirectMsgs([]); }} style={{ color: 'var(--text2)' }}>←</button>
-                      <span className="text-sm font-semibold">{directTarget}</span>
+                      <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: allPlayers.find(p => p.name === directTarget)?.color ?? '#888' }} />
+                      <span className="text-sm font-semibold">{allPlayers.find(p => p.name === directTarget)?.empire ?? directTarget}</span>
                     </div>
                     <MessageList messages={directMsgs} />
                     <MessageInput value={directInput} onChange={setDirectInput} onSend={sendDirect} placeholder="Diplomatic communiqué..." />
