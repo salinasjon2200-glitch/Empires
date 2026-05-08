@@ -63,6 +63,10 @@ export default function LandingPage() {
         </div>
 
       </div>
+
+      <p className="mt-8 text-xs" style={{ color: 'var(--text2)', opacity: 0.5 }}>
+        Created by Alex
+      </p>
     </div>
   );
 }
