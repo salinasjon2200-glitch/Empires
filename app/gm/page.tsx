@@ -61,6 +61,7 @@ export default function GMPage() {
   const [randomPool, setRandomPool] = useState<string[]>([]);
   const [randomAssignments, setRandomAssignments] = useState<Array<{ playerName: string; empire: string; color: string; country: string }>>([]);
   const [randomizing, setRandomizing] = useState(false);
+  const [turnOpen, setTurnOpen] = useState(true);
   const [worldNews, setWorldNews] = useState('');
   const [worldNewsYear, setWorldNewsYear] = useState<number | null>(null);
   const [worldNewsSaving, setWorldNewsSaving] = useState(false);
@@ -97,6 +98,7 @@ export default function GMPage() {
     if (stateR.ok) {
       const s = await stateR.json();
       setYear(s.currentYear ?? 2032);
+      setTurnOpen(s.turnOpen !== false);
       const lastCompleted = s.lastTurnCompletedAt;
       if (lastCompleted) {
         const remaining = (lastCompleted + 24 * 60 * 60 * 1000) - Date.now();
@@ -370,7 +372,22 @@ export default function GMPage() {
         <div className="flex items-center justify-between">
           <h1 className="display-font text-xl font-black" style={{ color: 'var(--accent)' }}>GM DASHBOARD — YEAR {year}</h1>
           <div className="flex gap-2 items-center">
-            <span className="badge badge-success">TURN OPEN</span>
+            <span className={`badge ${turnOpen ? 'badge-success' : 'badge-danger'}`}>
+              {turnOpen ? 'TURN OPEN' : 'TURN CLOSED'}
+            </span>
+            <button
+              className="btn-ghost text-xs"
+              onClick={async () => {
+                const r = await fetch('/api/game/patch-state', {
+                  method: 'POST',
+                  headers: headers(),
+                  body: JSON.stringify({ turnOpen: !turnOpen }),
+                });
+                if (r.ok) setTurnOpen(t => !t);
+              }}
+            >
+              {turnOpen ? 'Close Turn' : 'Open Turn'}
+            </button>
           </div>
         </div>
 

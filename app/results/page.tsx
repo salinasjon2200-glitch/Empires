@@ -34,11 +34,13 @@ export default function ResultsPage() {
       setTerritories(map.territories ?? {});
       const yr = state.currentYear ?? 2032;
       setYear(yr);
-      setViewYear(yr);
+      setPlayers(playerData.players ?? []);
       const archYears = (arch.archive ?? []).sort((a: number, b: number) => b - a);
       setArchive(archYears);
-      setPlayers(playerData.players ?? []);
-      loadSummary(yr);
+      // Show the most recently COMPLETED year (last archived), not the current open year
+      const lastCompleted = archYears[0] ?? (yr - 1);
+      setViewYear(lastCompleted);
+      loadSummary(lastCompleted);
     }).catch(() => {});
   }, []);
 
@@ -50,25 +52,28 @@ export default function ResultsPage() {
     }).catch(() => {});
   }
 
-  async function loadAdvisors() {
+  async function loadAdvisors(overrideYear?: number) {
     if (!session) return;
     setLoadingAdvisors(true);
     setAdvisorError('');
-    const r = await fetch(`/api/turns/${year}/advisors/${encodeURIComponent(session.playerName)}`, {
+    setAdvisorReport('');
+    const fetchYear = overrideYear ?? viewYear;
+    const r = await fetch(`/api/turns/${fetchYear}/advisors/${encodeURIComponent(session.playerName)}`, {
       headers: { 'Authorization': `Bearer ${session.sessionToken}` },
     });
     if (r.ok) {
       const d = await r.json();
       setAdvisorReport(d.report ?? '');
     } else {
-      setAdvisorError('No advisor report available for this turn.');
+      setAdvisorError(`No advisor report available for Year ${fetchYear}.`);
     }
     setLoadingAdvisors(false);
   }
 
+  // Reload advisors when the viewed year changes or when tab switches to advisors
   useEffect(() => {
-    if (activeTab === 'advisors' && session && !advisorReport) loadAdvisors();
-  }, [activeTab]);
+    if (activeTab === 'advisors' && session) loadAdvisors(viewYear);
+  }, [activeTab, viewYear]);
 
   return (
     <div className="min-h-screen p-4 md:p-6">
@@ -76,7 +81,7 @@ export default function ResultsPage() {
 
         <div className="flex items-center justify-between flex-wrap gap-4">
           <h1 className="display-font text-2xl font-black" style={{ color: 'var(--accent)' }}>
-            WORLD SUMMARY — YEAR {viewYear}
+            RESULTS — YEAR {viewYear}
           </h1>
           <div className="flex gap-3">
             <Link href="/submit" className="btn-ghost text-sm">← Submission</Link>
@@ -142,7 +147,7 @@ export default function ResultsPage() {
                 ) : advisorError ? (
                   <div className="space-y-3">
                     <p className="danger">{advisorError}</p>
-                    <button className="btn-primary" onClick={loadAdvisors}>Retry</button>
+                    <button className="btn-primary" onClick={() => { loadAdvisors(viewYear); }}>Retry</button>
                   </div>
                 ) : advisorReport ? (
                   <div style={{ color: 'var(--text)', lineHeight: 1.7 }}>
@@ -154,7 +159,7 @@ export default function ResultsPage() {
                   </div>
                 ) : (
                   <div className="text-center py-8">
-                    <button className="btn-primary" onClick={loadAdvisors} disabled={loadingAdvisors}>
+                    <button className="btn-primary" onClick={() => { loadAdvisors(viewYear); }} disabled={loadingAdvisors}>
                       {loadingAdvisors ? 'Loading...' : 'Load Classified Intel'}
                     </button>
                   </div>
