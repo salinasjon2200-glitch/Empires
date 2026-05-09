@@ -13,7 +13,7 @@ export default function SubmitPage() {
   const [session, setSession] = useState<Session | null>(null);
   const [territories, setTerritories] = useState({});
   const [players, setPlayers] = useState<Player[]>([]);
-  const [actions, setActions] = useState<Record<string, boolean>>({});
+  const [submittedNames, setSubmittedNames] = useState<Set<string>>(new Set());
   const [year, setYear] = useState(2032);
   const [actionText, setActionText] = useState('');
   const [submitted, setSubmitted] = useState(false);
@@ -46,8 +46,10 @@ export default function SubmitPage() {
         if (s?.publicSummary) setPrevSummary(s.publicSummary);
       }).catch(() => {});
 
-      // Load submission status
-      fetch(`/api/turns/actions`, { headers: { 'Authorization': `Bearer ${localStorage.getItem('empires-gm') ?? ''}` } }).catch(() => {});
+      // Load initial submission status
+      fetch('/api/turns/status').then(r => r.ok ? r.json() : null).then(d => {
+        if (d?.submitted) setSubmittedNames(new Set(d.submitted));
+      }).catch(() => {});
     }).catch(() => {});
 
     // Check if already submitted
@@ -58,6 +60,17 @@ export default function SubmitPage() {
   // Load war chest
   useEffect(() => {
     fetch('/api/war-chest').then(r => r.json()).then(d => setWarChest(d.warChest)).catch(() => {});
+  }, []);
+
+  // Poll submission status every 15s
+  useEffect(() => {
+    const poll = () => {
+      fetch('/api/turns/status').then(r => r.ok ? r.json() : null).then(d => {
+        if (d?.submitted) setSubmittedNames(new Set(d.submitted));
+      }).catch(() => {});
+    };
+    const id = setInterval(poll, 15000);
+    return () => clearInterval(id);
   }, []);
 
   // Countdown interval
@@ -82,6 +95,7 @@ export default function SubmitPage() {
     if (r.ok) {
       setSubmitted(true);
       localStorage.setItem(`submitted-${year}`, '1');
+      if (session) setSubmittedNames(prev => new Set([...prev, session.playerName]));
     } else {
       setError(d.error ?? 'Submission failed');
     }
@@ -109,7 +123,7 @@ export default function SubmitPage() {
   }
 
   const activePlayers = players.filter(p => p.status === 'active');
-  const submittedCount = Object.keys(actions).length;
+  const submittedCount = submittedNames.size;
 
   return (
     <div className="min-h-screen p-4 md:p-6">
@@ -203,7 +217,7 @@ export default function SubmitPage() {
                     <span className="text-sm flex-1">{p.empire}</span>
                     {p.status === 'eliminated' ? (
                       <span className="badge badge-danger" style={{ fontSize: '0.6rem' }}>ELIMINATED</span>
-                    ) : actions[p.name] ? (
+                    ) : submittedNames.has(p.name) ? (
                       <span className="badge badge-success" style={{ fontSize: '0.6rem' }}>SUBMITTED</span>
                     ) : (
                       <span className="badge badge-neutral" style={{ fontSize: '0.6rem' }}>PENDING</span>
