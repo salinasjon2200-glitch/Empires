@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { ComposableMap, Geographies, Geography } from 'react-simple-maps';
 import { TerritoryMap, BidState } from '@/lib/types';
 
@@ -93,6 +93,22 @@ interface WorldMapProps {
 
 export default function WorldMap({ territories = {}, bids = {}, mode = 'territories', height = 400, onCountryClick, selectedCountry }: WorldMapProps) {
   const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
+  const [isFs, setIsFs] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const onChange = () => setIsFs(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', onChange);
+    return () => document.removeEventListener('fullscreenchange', onChange);
+  }, []);
+
+  function toggleFullscreen() {
+    if (!document.fullscreenElement) {
+      containerRef.current?.requestFullscreen().catch(() => {});
+    } else {
+      document.exitFullscreen().catch(() => {});
+    }
+  }
 
   function getGameName(atlasName: string, geoId: number): string {
     const existingKey = matchCountry(atlasName, geoId, territories);
@@ -154,7 +170,54 @@ export default function WorldMap({ territories = {}, bids = {}, mode = 'territor
   }
 
   return (
-    <div className="relative" style={{ height }}>
+    <div
+      ref={containerRef}
+      className="relative"
+      style={{
+        height: isFs ? '100vh' : height,
+        background: isFs ? 'var(--bg)' : 'transparent',
+      }}
+    >
+      {/* Fullscreen toggle */}
+      <button
+        onClick={toggleFullscreen}
+        title={isFs ? 'Exit fullscreen' : 'Fullscreen map'}
+        style={{
+          position: 'absolute',
+          top: '0.5rem',
+          right: '0.5rem',
+          zIndex: 10,
+          width: '1.75rem',
+          height: '1.75rem',
+          background: 'rgba(0,0,0,0.45)',
+          border: '1px solid rgba(255,255,255,0.15)',
+          borderRadius: '0.3rem',
+          color: '#ccc',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          {isFs ? (
+            <>
+              <polyline points="8 3 3 3 3 8"/><line x1="3" y1="3" x2="10" y2="10"/>
+              <polyline points="16 3 21 3 21 8"/><line x1="21" y1="3" x2="14" y2="10"/>
+              <polyline points="8 21 3 21 3 16"/><line x1="3" y1="21" x2="10" y2="14"/>
+              <polyline points="16 21 21 21 21 16"/><line x1="21" y1="21" x2="14" y2="14"/>
+            </>
+          ) : (
+            <>
+              <polyline points="15 3 21 3 21 9"/><line x1="21" y1="3" x2="14" y2="10"/>
+              <polyline points="9 21 3 21 3 15"/><line x1="3" y1="21" x2="10" y2="14"/>
+              <polyline points="21 15 21 21 15 21"/><line x1="21" y1="21" x2="14" y2="14"/>
+              <polyline points="3 9 3 3 9 3"/><line x1="3" y1="3" x2="10" y2="10"/>
+            </>
+          )}
+        </svg>
+      </button>
+
       <ComposableMap
         projectionConfig={{ scale: 130 }}
         style={{ width: '100%', height: '100%', background: 'transparent' }}
