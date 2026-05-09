@@ -19,7 +19,6 @@ export default function SubmitPage() {
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [prevSummary, setPrevSummary] = useState('');
   const [warChest, setWarChest] = useState<{ balance: number; threshold: number; contributions: Array<{ name: string; amount: number; timestamp: number }>; lastTurnCost: number } | null>(null);
   const [countdown, setCountdown] = useState(0);
   const [lastTurnAt, setLastTurnAt] = useState<number | null>(null);
@@ -40,11 +39,6 @@ export default function SubmitPage() {
 
       if (state.lastTurnCompletedAt) setLastTurnAt(state.lastTurnCompletedAt);
 
-      // Load previous summary
-      const prevYear = yr - 1;
-      fetch(`/api/turns/${prevYear}/summary`).then(r => r.ok ? r.json() : null).then(s => {
-        if (s?.publicSummary) setPrevSummary(s.publicSummary);
-      }).catch(() => {});
 
       // Load initial submission status
       fetch('/api/turns/status').then(r => r.ok ? r.json() : null).then(d => {
@@ -159,16 +153,16 @@ export default function SubmitPage() {
           {/* LEFT: Action submission */}
           <div className="lg:col-span-2 space-y-6">
 
-            {/* Previous summary */}
-            {prevSummary && (
-              <div className="card">
-                <p className="label mb-3">Previous Turn Summary (Year {year - 1})</p>
-                <div className="text-sm leading-relaxed max-h-48 overflow-y-auto" style={{ color: 'var(--text2)' }}>
-                  {prevSummary.split('\n').slice(0, 15).join('\n')}...
-                </div>
-                <Link href="/results" className="text-xs mt-2 block" style={{ color: 'var(--accent)' }}>Read full summary →</Link>
+            {/* World News Report link */}
+            <Link href="/news" className="card flex items-center justify-between gap-4 hover:border-accent transition-colors" style={{ textDecoration: 'none' }}>
+              <div>
+                <p className="label mb-1">🌍 World News Report — Year {year - 1}</p>
+                <p className="text-xs" style={{ color: 'var(--text2)' }}>
+                  Read the full public summary of last turn — what every empire knows heading into {year}.
+                </p>
               </div>
-            )}
+              <span className="text-lg flex-shrink-0" style={{ color: 'var(--accent)' }}>→</span>
+            </Link>
 
             {/* Map */}
             <div className="card">
