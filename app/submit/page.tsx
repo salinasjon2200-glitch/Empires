@@ -95,7 +95,7 @@ export default function SubmitPage() {
     if (r.ok) {
       setSubmitted(true);
       localStorage.setItem(`submitted-${year}`, '1');
-      if (session) setSubmittedNames(prev => new Set([...prev, session.playerName]));
+      if (session) setSubmittedNames(prev => { const s = new Set(Array.from(prev)); s.add(session.playerName); return s; });
     } else {
       setError(d.error ?? 'Submission failed');
     }
