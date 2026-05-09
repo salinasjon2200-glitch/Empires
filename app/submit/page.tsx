@@ -73,6 +73,14 @@ export default function SubmitPage() {
     return () => clearInterval(id);
   }, []);
 
+  // Mark as submitted if the server says so (covers different devices / cleared localStorage)
+  useEffect(() => {
+    if (session && submittedNames.has(session.playerName)) {
+      setSubmitted(true);
+      localStorage.setItem(`submitted-${year}`, '1');
+    }
+  }, [submittedNames, session, year]);
+
   // Countdown interval
   useEffect(() => {
     if (!lastTurnAt) return;
