@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { ThemeProvider } from '@/components/ThemeProvider';
+import FullscreenButton from '@/components/FullscreenButton';
 
 export const metadata: Metadata = {
   title: 'EMPIRES — Grand Strategy',
@@ -17,6 +18,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <ThemeProvider>
           {children}
+          <FullscreenButton />
         </ThemeProvider>
       </body>
     </html>
