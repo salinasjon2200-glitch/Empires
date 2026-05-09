@@ -16,7 +16,7 @@ export default function SubmitPage() {
   const [submittedNames, setSubmittedNames] = useState<Set<string>>(new Set());
   const [year, setYear] = useState(2032);
   const [actionText, setActionText] = useState('');
-  const [submitted, setSubmitted] = useState(false);
+  const [justSubmitted, setJustSubmitted] = useState(false); // optimistic flag for this session only
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [warChest, setWarChest] = useState<{ balance: number; threshold: number; contributions: Array<{ name: string; amount: number; timestamp: number }>; lastTurnCost: number } | null>(null);
@@ -36,27 +36,21 @@ export default function SubmitPage() {
       setPlayers(playerData.players ?? []);
       const yr = state.currentYear ?? 2032;
       setYear(yr);
-
       if (state.lastTurnCompletedAt) setLastTurnAt(state.lastTurnCompletedAt);
 
-
-      // Load initial submission status
+      // Load submission status from server (authoritative — do not use localStorage)
       fetch('/api/turns/status').then(r => r.ok ? r.json() : null).then(d => {
         if (d?.submitted) setSubmittedNames(new Set(d.submitted));
       }).catch(() => {});
     }).catch(() => {});
-
-    // Check if already submitted
-    const submittedKey = `submitted-${year}`;
-    if (localStorage.getItem(submittedKey)) setSubmitted(true);
-  }, [year]);
+  }, []);
 
   // Load war chest
   useEffect(() => {
     fetch('/api/war-chest').then(r => r.json()).then(d => setWarChest(d.warChest)).catch(() => {});
   }, []);
 
-  // Poll submission status every 15s
+  // Poll submission status every 15s — server is the only source of truth
   useEffect(() => {
     const poll = () => {
       fetch('/api/turns/status').then(r => r.ok ? r.json() : null).then(d => {
@@ -66,14 +60,6 @@ export default function SubmitPage() {
     const id = setInterval(poll, 15000);
     return () => clearInterval(id);
   }, []);
-
-  // Mark as submitted if the server says so (covers different devices / cleared localStorage)
-  useEffect(() => {
-    if (session && submittedNames.has(session.playerName)) {
-      setSubmitted(true);
-      localStorage.setItem(`submitted-${year}`, '1');
-    }
-  }, [submittedNames, session, year]);
 
   // Countdown interval
   useEffect(() => {
@@ -95,14 +81,17 @@ export default function SubmitPage() {
     });
     const d = await r.json();
     if (r.ok) {
-      setSubmitted(true);
-      localStorage.setItem(`submitted-${year}`, '1');
+      // Update submittedNames so the sidebar reflects it immediately
       if (session) setSubmittedNames(prev => { const s = new Set(Array.from(prev)); s.add(session.playerName); return s; });
+      setJustSubmitted(true);
     } else {
       setError(d.error ?? 'Submission failed');
     }
     setLoading(false);
   }
+
+  // submitted = true only if the SERVER confirms this player has submitted
+  const submitted = justSubmitted || (!!session && submittedNames.has(session.playerName));
 
   // Eliminated screen
   if (session?.status === 'eliminated') {
