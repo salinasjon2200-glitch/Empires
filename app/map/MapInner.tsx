@@ -5,7 +5,167 @@ import Link from 'next/link';
 
 const GEO_URL = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json';
 
-// Atlas name → game name
+// M49 numeric code → empire hex color
+// Build from empire → ISO-3 → M49 mappings
+const M49_COLOR: Record<number, string> = {
+  // AMAZONIAN EMPIRE #5DADE2: DEU, MNG, IRQ, AUS, USA (Arby's dominant for USA)
+  276: '#5DADE2', // DEU Germany
+  496: '#5DADE2', // MNG Mongolia
+  368: '#5DADE2', // IRQ Iraq
+  36:  '#5DADE2', // AUS Australia
+
+  // GREAT PHILIPPEAH EMPIRE #F1C40F: SAU, MEX, PRK, TWN
+  682: '#F1C40F', // SAU Saudi Arabia
+  484: '#F1C40F', // MEX Mexico
+  408: '#F1C40F', // PRK North Korea
+  158: '#F1C40F', // TWN Taiwan
+
+  // NOT SEE EMPIRE #E67E22
+  156: '#E67E22', // CHN China
+  398: '#E67E22', // KAZ Kazakhstan
+  792: '#E67E22', // TUR Turkey
+  268: '#E67E22', // GEO Georgia
+  31:  '#E67E22', // AZE Azerbaijan
+  51:  '#E67E22', // ARM Armenia
+  504: '#E67E22', // MAR Morocco
+  12:  '#E67E22', // DZA Algeria
+  788: '#E67E22', // TUN Tunisia
+  434: '#E67E22', // LBY Libya
+  729: '#E67E22', // SDN Sudan
+  728: '#E67E22', // SSD South Sudan
+  231: '#E67E22', // ETH Ethiopia
+  706: '#E67E22', // SOM Somalia
+  404: '#E67E22', // KEN Kenya
+  800: '#E67E22', // UGA Uganda
+  834: '#E67E22', // TZA Tanzania
+  232: '#E67E22', // ERI Eritrea
+  262: '#E67E22', // DJI Djibouti
+  646: '#E67E22', // RWA Rwanda
+  108: '#E67E22', // BDI Burundi
+  566: '#E67E22', // NGA Nigeria
+  288: '#E67E22', // GHA Ghana
+  120: '#E67E22', // CMR Cameroon
+  180: '#E67E22', // COD DR Congo
+  178: '#E67E22', // COG Republic of Congo
+  24:  '#E67E22', // AGO Angola
+  894: '#E67E22', // ZMB Zambia
+  716: '#E67E22', // ZWE Zimbabwe
+  508: '#E67E22', // MOZ Mozambique
+  710: '#E67E22', // ZAF South Africa
+  516: '#E67E22', // NAM Namibia
+  72:  '#E67E22', // BWA Botswana
+  454: '#E67E22', // MWI Malawi
+  426: '#E67E22', // LSO Lesotho
+  748: '#E67E22', // SWZ Eswatini
+  266: '#E67E22', // GAB Gabon
+  226: '#E67E22', // GNQ Equatorial Guinea
+  140: '#E67E22', // CAF Central African Republic
+  148: '#E67E22', // TCD Chad
+  466: '#E67E22', // MLI Mali
+  562: '#E67E22', // NER Niger
+  854: '#E67E22', // BFA Burkina Faso
+  686: '#E67E22', // SEN Senegal
+  270: '#E67E22', // GMB Gambia
+  624: '#E67E22', // GNB Guinea-Bissau
+  324: '#E67E22', // GIN Guinea
+  694: '#E67E22', // SLE Sierra Leone
+  430: '#E67E22', // LBR Liberia
+  384: '#E67E22', // CIV Ivory Coast
+  768: '#E67E22', // TGO Togo
+  204: '#E67E22', // BEN Benin
+
+  // IKEA #82E0AA: POL, SWE, LTU, LVA
+  616: '#82E0AA', // POL Poland
+  752: '#82E0AA', // SWE Sweden
+  440: '#82E0AA', // LTU Lithuania
+  428: '#82E0AA', // LVA Latvia
+
+  // LOGAN'S EMPIRE #95A5A6: RUS
+  643: '#95A5A6', // RUS Russia
+
+  // ARBY'S #F4D03F: USA, CUB, BHS
+  840: '#F4D03F', // USA United States
+  192: '#F4D03F', // CUB Cuba
+  44:  '#F4D03F', // BHS Bahamas
+
+  // NOOBIAN EMPIRE #FF69B4: ITA, IRL, ISL, MLT, SMR
+  380: '#FF69B4', // ITA Italy
+  372: '#FF69B4', // IRL Ireland
+  352: '#FF69B4', // ISL Iceland
+  470: '#FF69B4', // MLT Malta
+  674: '#FF69B4', // SMR San Marino
+
+  // LEGOLAND #9B59B6: ISR, KOR, GBR, DNK, PAK
+  376: '#9B59B6', // ISR Israel
+  410: '#9B59B6', // KOR South Korea
+  826: '#9B59B6', // GBR United Kingdom
+  208: '#9B59B6', // DNK Denmark
+  586: '#9B59B6', // PAK Pakistan
+
+  // WINITALL #D7BDE2: JPN, PRT
+  392: '#D7BDE2', // JPN Japan
+  620: '#D7BDE2', // PRT Portugal
+
+  // ICE MELTERS #8B4513: FRA, PAN, EGY, IND
+  250: '#8B4513', // FRA France
+  591: '#8B4513', // PAN Panama
+  818: '#8B4513', // EGY Egypt
+  356: '#8B4513', // IND India
+
+  // JONATHAN'S EMPIRE #A0522D: IDN, NLD, BEL, VAT
+  360: '#A0522D', // IDN Indonesia
+  528: '#A0522D', // NLD Netherlands
+  56:  '#A0522D', // BEL Belgium
+  336: '#A0522D', // VAT Vatican City
+
+  // BRYSON'S EMPIRE #2a2a2a: BRA, IRN, VEN
+  76:  '#2a2a2a', // BRA Brazil
+  364: '#2a2a2a', // IRN Iran
+  862: '#2a2a2a', // VEN Venezuela
+
+  // WORLD BREAKERS #186A3B: VNM, PNG, PER, COL, CHL
+  704: '#186A3B', // VNM Vietnam
+  598: '#186A3B', // PNG Papua New Guinea
+  604: '#186A3B', // PER Peru
+  170: '#186A3B', // COL Colombia
+  152: '#186A3B', // CHL Chile
+
+  // VILTRUM #F5B041: CAN, UKR, NZL, PHL, GRL
+  124: '#F5B041', // CAN Canada
+  804: '#F5B041', // UKR Ukraine
+  554: '#F5B041', // NZL New Zealand
+  608: '#F5B041', // PHL Philippines
+  304: '#F5B041', // GRL Greenland
+
+  // NEW YUGOSLAVIA #DC7633: BGR, ROU, ALB, SRB, HRV, BIH, MKD, MNE
+  100: '#DC7633', // BGR Bulgaria
+  642: '#DC7633', // ROU Romania
+  8:   '#DC7633', // ALB Albania
+  688: '#DC7633', // SRB Serbia
+  191: '#DC7633', // HRV Croatia
+  70:  '#DC7633', // BIH Bosnia and Herzegovina
+  807: '#DC7633', // MKD North Macedonia
+  499: '#DC7633', // MNE Montenegro
+
+  // TEMU'S EMPIRE #A9CCE3: AFG, TKM, TJK, UZB, KGZ
+  4:   '#A9CCE3', // AFG Afghanistan
+  795: '#A9CCE3', // TKM Turkmenistan
+  762: '#A9CCE3', // TJK Tajikistan
+  860: '#A9CCE3', // UZB Uzbekistan
+  417: '#A9CCE3', // KGZ Kyrgyzstan
+
+  // UNGOVERNED/DESTROYED #4A4A4A: CHE, AUT, NOR, ARG, BOL, MDG, GRC, ESP
+  756: '#4A4A4A', // CHE Switzerland
+  40:  '#4A4A4A', // AUT Austria
+  578: '#4A4A4A', // NOR Norway
+  32:  '#4A4A4A', // ARG Argentina
+  68:  '#4A4A4A', // BOL Bolivia
+  450: '#4A4A4A', // MDG Madagascar
+  300: '#4A4A4A', // GRC Greece
+  724: '#4A4A4A', // ESP Spain
+};
+
+// Atlas name → game name (kept for tooltips / info panel)
 const ATLAS_TO_GAME: Record<string, string> = {
   'United States of America': 'United States',
   'Russian Federation': 'Russia',
@@ -206,21 +366,26 @@ function getTerritoryInfo(atlasName: string): TerritorySpec | null {
   return TERRITORIES[name] ?? null;
 }
 
-function getFill(atlasName: string, hovered: string | null): string {
+function getFill(atlasName: string, hovered: string | null, geoId: number): string {
   const name = gameName(atlasName);
   if (hovered === name) return '#ffffff22';
-  const t = getTerritoryInfo(atlasName);
-  if (!t) return '#2C3E50';
-  if (t.pattern === 'crosshatch') return 'url(#crosshatch)';
-  if (t.pattern === 'stripes') return 'url(#stripes)';
-  return t.color + 'cc';
+  // Use M49 ID for reliable color lookup
+  const empireColor = M49_COLOR[geoId];
+  if (empireColor) {
+    // Special pattern territories (Switzerland, Austria → crosshatch; Spain → stripes)
+    // CHE=756, AUT=40, ESP=724
+    if (geoId === 756 || geoId === 40) return 'url(#crosshatch)';
+    if (geoId === 724) return 'url(#stripes)';
+    return empireColor + 'cc';
+  }
+  return '#2C3E50';
 }
 
-function getStroke(atlasName: string): string {
-  const t = getTerritoryInfo(atlasName);
-  if (!t) return '#3d5166';
-  if (t.color === '#4A4A4A' || t.pattern) return '#666';
-  return t.color;
+function getStroke(geoId: number): string {
+  const empireColor = M49_COLOR[geoId];
+  if (!empireColor) return '#3d5166';
+  if (empireColor === '#4A4A4A') return '#666';
+  return empireColor;
 }
 
 export default function MapInner() {
@@ -318,8 +483,9 @@ export default function MapInner() {
               geographies.map(geo => {
                 const atlasName: string = geo.properties.name;
                 const name = gameName(atlasName);
-                const fill = getFill(atlasName, hovered);
-                const stroke = getStroke(atlasName);
+                const geoId = parseInt(geo.id as string, 10);
+                const fill = getFill(atlasName, hovered, geoId);
+                const stroke = getStroke(geoId);
                 const isSelected = selected ? (() => {
                   const t = TERRITORIES[name];
                   return t && selectedInfo && t.empire === selectedInfo.empire;

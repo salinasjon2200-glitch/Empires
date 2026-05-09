@@ -5,6 +5,40 @@ import { TerritoryMap, BidState } from '@/lib/types';
 
 const GEO_URL = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json';
 
+// M49 numeric code → ISO-3 country code for name-based territory matching
+// Used to map geo.id → a canonical country name for TerritoryMap lookups
+const M49_TO_NAME: Record<number, string> = {
+  4: 'Afghanistan', 8: 'Albania', 12: 'Algeria', 24: 'Angola', 36: 'Australia',
+  40: 'Austria', 31: 'Azerbaijan', 44: 'Bahamas', 56: 'Belgium', 68: 'Bolivia',
+  70: 'Bosnia', 72: 'Botswana', 76: 'Brazil', 100: 'Bulgaria', 108: 'Burundi',
+  120: 'Cameroon', 124: 'Canada', 140: 'Central African Republic', 152: 'Chile',
+  156: 'China', 170: 'Colombia', 178: 'Republic of Congo', 180: 'DR Congo',
+  191: 'Croatia', 192: 'Cuba', 208: 'Denmark', 262: 'Djibouti', 232: 'Eritrea',
+  231: 'Ethiopia', 250: 'France', 266: 'Gabon', 288: 'Ghana', 300: 'Greece',
+  324: 'Guinea', 624: 'Guinea-Bissau', 356: 'India', 360: 'Indonesia',
+  364: 'Iran', 368: 'Iraq', 372: 'Ireland', 376: 'Israel', 380: 'Italy',
+  392: 'Japan', 398: 'Kazakhstan', 404: 'Kenya', 408: 'North Korea',
+  410: 'South Korea', 417: 'Kyrgyzstan', 428: 'Latvia', 430: 'Liberia',
+  434: 'Libya', 440: 'Lithuania', 450: 'Madagascar', 454: 'Malawi',
+  484: 'Mexico', 466: 'Mali', 504: 'Morocco', 508: 'Mozambique', 516: 'Namibia',
+  528: 'Netherlands', 554: 'New Zealand', 562: 'Niger', 566: 'Nigeria',
+  578: 'Norway', 586: 'Pakistan', 591: 'Panama', 598: 'Papua New Guinea',
+  604: 'Peru', 608: 'Philippines', 616: 'Poland', 620: 'Portugal',
+  642: 'Romania', 643: 'Russia', 646: 'Rwanda', 682: 'Saudi Arabia',
+  686: 'Senegal', 694: 'Sierra Leone', 706: 'Somalia', 710: 'South Africa',
+  724: 'Spain', 729: 'Sudan', 728: 'South Sudan', 752: 'Sweden', 756: 'Switzerland',
+  762: 'Tajikistan', 768: 'Togo', 788: 'Tunisia', 792: 'Turkey', 800: 'Uganda',
+  804: 'Ukraine', 826: 'United Kingdom', 840: 'United States', 858: 'Uruguay',
+  860: 'Uzbekistan', 862: 'Venezuela', 704: 'Vietnam', 894: 'Zambia',
+  716: 'Zimbabwe', 32: 'Argentina', 499: 'Montenegro', 807: 'North Macedonia',
+  688: 'Serbia', 204: 'Benin', 854: 'Burkina Faso', 226: 'Equatorial Guinea',
+  270: 'Gambia', 304: 'Greenland', 352: 'Iceland', 426: 'Lesotho',
+  470: 'Malta', 496: 'Mongolia', 334: 'Heard Island', 336: 'Vatican City',
+  384: 'Ivory Coast', 51: 'Armenia', 268: 'Georgia', 148: 'Chad',
+  834: 'Tanzania', 748: 'Eswatini', 158: 'Taiwan', 674: 'San Marino',
+  795: 'Turkmenistan',
+};
+
 const COUNTRY_NAME_MAP: Record<string, string> = {
   'United States of America': 'United States',
   'Russian Federation': 'Russia',
@@ -18,9 +52,28 @@ const COUNTRY_NAME_MAP: Record<string, string> = {
   'Saudi Arabia': 'Saudi Arabia',
   'South Africa': 'South Africa',
   'Sri Lanka': 'Sri Lanka',
+  'Viet Nam': 'Vietnam',
+  'Iran (Islamic Republic of)': 'Iran',
+  'Venezuela, Bolivarian Republic of': 'Venezuela',
+  'Bolivia, Plurinational State of': 'Bolivia',
+  'United Republic of Tanzania': 'Tanzania',
+  "Côte d'Ivoire": 'Ivory Coast',
+  'Congo, the Democratic Republic of the': 'DR Congo',
+  'Dem. Rep. Congo': 'DR Congo',
+  'S. Sudan': 'South Sudan',
+  'Eq. Guinea': 'Equatorial Guinea',
+  'Central African Rep.': 'Central African Republic',
+  'Bosnia and Herz.': 'Bosnia',
+  'Czechia': 'Czech Republic',
+  'N. Korea': 'North Korea',
+  'S. Korea': 'South Korea',
 };
 
-function matchCountry(geoName: string, territories: TerritoryMap | BidState): string | null {
+function matchCountry(geoName: string, geoId: number, territories: TerritoryMap | BidState): string | null {
+  // Try M49 ID → canonical name first
+  const m49Name = M49_TO_NAME[geoId];
+  if (m49Name && territories[m49Name]) return m49Name;
+  // Fall back to atlas name mapping
   const mapped = COUNTRY_NAME_MAP[geoName] ?? geoName;
   if (territories[mapped]) return mapped;
   for (const key of Object.keys(territories)) {
@@ -41,20 +94,20 @@ interface WorldMapProps {
 export default function WorldMap({ territories = {}, bids = {}, mode = 'territories', height = 400, onCountryClick, selectedCountry }: WorldMapProps) {
   const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
 
-  function getGameName(atlasName: string): string {
-    const existingKey = matchCountry(atlasName, territories);
-    return existingKey ?? (COUNTRY_NAME_MAP[atlasName] ?? atlasName);
+  function getGameName(atlasName: string, geoId: number): string {
+    const existingKey = matchCountry(atlasName, geoId, territories);
+    return existingKey ?? (M49_TO_NAME[geoId] ?? COUNTRY_NAME_MAP[atlasName] ?? atlasName);
   }
 
-  function getColor(geoName: string): string {
-    const gameName = getGameName(geoName);
+  function getColor(geoName: string, geoId: number): string {
+    const gameName = getGameName(geoName, geoId);
     if (selectedCountry && gameName === selectedCountry) return '#00d4ff55';
     if (mode === 'bidding') {
-      const key = matchCountry(geoName, bids);
+      const key = matchCountry(geoName, geoId, bids);
       if (key && bids[key]) return (bids[key] as { color: string }).color + 'b3';
       return '#1e3a5f';
     }
-    const key = matchCountry(geoName, territories);
+    const key = matchCountry(geoName, geoId, territories);
     if (!key) return '#1a2a3a';
     const t = territories[key];
     if (!t) return '#1a2a3a';
@@ -67,15 +120,15 @@ export default function WorldMap({ territories = {}, bids = {}, mode = 'territor
     }
   }
 
-  function getStroke(geoName: string): string {
-    const gameName = getGameName(geoName);
+  function getStroke(geoName: string, geoId: number): string {
+    const gameName = getGameName(geoName, geoId);
     if (selectedCountry && gameName === selectedCountry) return '#00d4ff';
     if (mode === 'bidding') {
-      const key = matchCountry(geoName, bids);
+      const key = matchCountry(geoName, geoId, bids);
       if (key && bids[key]) return (bids[key] as { color: string }).color;
       return '#1e3a5f';
     }
-    const key = matchCountry(geoName, territories);
+    const key = matchCountry(geoName, geoId, territories);
     if (!key) return '#1e3a5f';
     const t = territories[key];
     if (t?.status === 'active') return t.color;
@@ -83,16 +136,16 @@ export default function WorldMap({ territories = {}, bids = {}, mode = 'territor
     return '#374151';
   }
 
-  function getTooltip(geoName: string): string {
+  function getTooltip(geoName: string, geoId: number): string {
     if (mode === 'bidding') {
-      const key = matchCountry(geoName, bids);
+      const key = matchCountry(geoName, geoId, bids);
       if (key && bids[key]) {
         const b = bids[key] as { empireName: string; amount: number };
         return `${geoName} — Leader: ${b.empireName} (${b.amount} pts)`;
       }
       return `${geoName} — No bids`;
     }
-    const key = matchCountry(geoName, territories);
+    const key = matchCountry(geoName, geoId, territories);
     if (!key) return `${geoName} — Unclaimed`;
     const t = territories[key];
     if (!t) return `${geoName} — Unclaimed`;
@@ -110,8 +163,9 @@ export default function WorldMap({ territories = {}, bids = {}, mode = 'territor
           {({ geographies }) =>
             geographies.map(geo => {
               const name = geo.properties.name;
-              const color = getColor(name);
-              const stroke = getStroke(name);
+              const geoId = parseInt(geo.id as string, 10);
+              const color = getColor(name, geoId);
+              const stroke = getStroke(name, geoId);
               const clickable = !!onCountryClick;
               return (
                 <Geography
@@ -126,14 +180,14 @@ export default function WorldMap({ territories = {}, bids = {}, mode = 'territor
                     pressed: { outline: 'none' },
                   }}
                   onMouseEnter={(evt) => {
-                    setTooltip({ text: getTooltip(name), x: evt.clientX, y: evt.clientY });
+                    setTooltip({ text: getTooltip(name, geoId), x: evt.clientX, y: evt.clientY });
                   }}
                   onMouseLeave={() => setTooltip(null)}
                   onMouseMove={(evt) => {
                     setTooltip(t => t ? { ...t, x: evt.clientX, y: evt.clientY } : null);
                   }}
                   onClick={() => {
-                    if (onCountryClick) onCountryClick(getGameName(name));
+                    if (onCountryClick) onCountryClick(getGameName(name, geoId));
                   }}
                 />
               );
