@@ -578,7 +578,7 @@ export default function GMPage() {
   async function runStats(skipExisting = false, targetYear?: number) {
     setProcessing(true);
     setProcessPhase('stats');
-    const statsYear = targetYear ?? year - 1;
+    const statsYear = targetYear ?? year;
     setStatsLog([`━━ Empire Statistics — Year ${statsYear} ━━`]);
     setStatsEmpireStatus({});
     setStatsEmpireChars({});
@@ -694,15 +694,8 @@ export default function GMPage() {
     setGmStatsLoading(true);
     setGmStatsError('');
     setGmStatsData(null);
-    // Try requested year first; if not found and user didn't specify, also try year-1
-    let r = await fetch(`/api/turns/${targetYear}/stats`, { headers: headers() });
-    let usedYear = targetYear;
-    if (!r.ok && !gmStatsYear && targetYear === year) {
-      // Automatically fall back to previous year
-      const fallback = year - 1;
-      const r2 = await fetch(`/api/turns/${fallback}/stats`, { headers: headers() });
-      if (r2.ok) { r = r2; usedYear = fallback; }
-    }
+    const r = await fetch(`/api/turns/${targetYear}/stats`, { headers: headers() });
+    const usedYear = targetYear;
     if (!r.ok) {
       const d = await r.json().catch(() => ({}));
       setGmStatsError(d.error ?? `No stats found for Year ${targetYear}.`);
@@ -1232,8 +1225,8 @@ export default function GMPage() {
                         disabled={processing}
                       >
                         {processing && processPhase === 'stats'
-                          ? '📊 Generating starting stats… do not close'
-                          : `📊 Generate Starting Stats for Year ${year}`}
+                          ? '📊 Generating stats… do not close'
+                          : `📊 Generate Empire Stats (Year ${year})`}
                       </button>
                       {statsLog.length > 0 && processPhase === 'stats' && (
                         <div className="text-xs font-mono space-y-0.5 max-h-32 overflow-y-auto p-2 rounded mt-2" style={{ background: 'var(--surface2)', color: 'var(--text2)' }}>
@@ -1851,13 +1844,9 @@ export default function GMPage() {
                     </button>
                   )}
                 </div>
-                <label className="flex items-center gap-2 text-xs cursor-pointer" style={{ color: 'var(--text2)' }}>
-                  <input type="checkbox" checked={statsForceInitial} onChange={e => setStatsForceInitial(e.target.checked)} />
-                  Force web-search baseline (use for post-bidding first turn, even if previous stats exist)
-                </label>
                 <button
                   className="btn-primary w-full py-2"
-                  onClick={() => runStats(false)}
+                  onClick={() => runStats(false, year - 1)}
                   disabled={processing || !phase3Done}
                 >
                   {processing && processPhase === 'stats'
@@ -1944,7 +1933,6 @@ export default function GMPage() {
                       ? 'Generating advisors… do not close'
                       : `📋 Regenerate All Advisor Reports (Year ${year - 1})`}
                   </button>
-                  {/* Regen Stats — current year (post-bidding / starting stats) */}
                   <button
                     className="btn-ghost w-full py-2 text-sm"
                     onClick={() => runStats(false, year)}
@@ -1952,17 +1940,7 @@ export default function GMPage() {
                   >
                     {processing && processPhase === 'stats'
                       ? 'Generating stats… do not close'
-                      : `📊 Generate Starting Stats (Year ${year})`}
-                  </button>
-                  {/* Regen Stats — previous year (post-turn) */}
-                  <button
-                    className="btn-ghost w-full py-2 text-sm"
-                    onClick={() => runStats(false)}
-                    disabled={processing}
-                  >
-                    {processing && processPhase === 'stats'
-                      ? 'Generating stats… do not close'
-                      : `📊 Regenerate All Empire Stats (Year ${year - 1})`}
+                      : `📊 Generate Empire Stats (Year ${year})`}
                   </button>
                   {statsLog.length > 0 && processPhase === 'stats' && (
                     <div className="text-xs font-mono space-y-0.5 max-h-40 overflow-y-auto p-2 rounded" style={{ background: 'var(--surface2)', color: 'var(--text2)' }}>
