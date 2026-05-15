@@ -300,35 +300,40 @@ export async function POST(req: NextRequest, { params }: { params: { year: strin
 
         send({ type: 'start', total: activePlayers.length, year });
 
-        // Process all empires in parallel
-        const results = await Promise.all(
-          activePlayers.map(async (player) => {
-            // Skip if already has stats and skipExisting is set
-            if (skipExisting && existingStats[player.empire]) {
-              send({ type: 'skipped', empire: player.empire });
-              return { empire: player.empire, stats: existingStats[player.empire] };
-            }
+        // Process empires sequentially to avoid rate limits and Vercel timeouts
+        const results: { empire: string; stats: EmpireStats | null }[] = [];
+        for (const player of activePlayers) {
+          // Skip if already has stats and skipExisting is set
+          if (skipExisting && existingStats[player.empire]) {
+            send({ type: 'skipped', empire: player.empire });
+            results.push({ empire: player.empire, stats: existingStats[player.empire] });
+            continue;
+          }
 
-            const prevStats = await loadPrevStats(archiveList, year, player.empire, k);
-            const territories = getEmpireTerritories(mapData, player.empire);
-            const isInitial = forceInitial || prevStats === null;
+          const prevStats = await loadPrevStats(archiveList, year, player.empire, k);
+          const territories = getEmpireTerritories(mapData, player.empire);
+          const isInitial = forceInitial || prevStats === null;
 
-            send({ type: 'empire_start', empire: player.empire, isInitial });
+          send({ type: 'empire_start', empire: player.empire, isInitial });
 
-            const stats = await generateStatsForEmpire(
-              player, pk, prevStats, territories, year, isInitial, send
-            );
+          const stats = await generateStatsForEmpire(
+            player, pk, prevStats, territories, year, isInitial, send
+          );
 
-            if (stats) {
-              send({ type: 'empire_done', empire: player.empire });
-              return { empire: player.empire, stats };
-            } else {
-              return { empire: player.empire, stats: null };
-            }
-          })
-        );
+          if (stats) {
+            send({ type: 'empire_done', empire: player.empire });
+            results.push({ empire: player.empire, stats });
+          } else {
+            results.push({ empire: player.empire, stats: null });
+          }
 
-        // Merge into existing dict and save
+          // Save after each empire so progress is preserved even if later ones fail
+          const interim = await dbGet<AllEmpireStats>(k(`turn:${year}:stats`)) ?? {};
+          if (stats) interim[player.empire] = stats;
+          await dbSet(k(`turn:${year}:stats`), interim);
+        }
+
+        // Final save (catches any that weren't persisted)
         const freshDict = await dbGet<AllEmpireStats>(k(`turn:${year}:stats`)) ?? {};
         for (const { empire, stats } of results) {
           if (stats) freshDict[empire] = stats;
