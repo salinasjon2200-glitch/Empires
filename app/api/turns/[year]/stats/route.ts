@@ -143,10 +143,10 @@ Generate the empire statistics JSON for Year ${year}. The year is ${year} — ma
         create: (params: object) => Promise<{ content: Array<{ type: string; text?: string }> }>;
       }).create({
         model: 'claude-sonnet-4-5',
-        max_tokens: 10000,
+        max_tokens: 4000,
         betas: ['web-search-2025-03-05'],
         system: STATS_SYSTEM,
-        tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
+        tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 2 }],
         messages: [{
           role: 'user',
           content: `${userContent}
@@ -162,7 +162,7 @@ IMPORTANT: This is the FIRST time generating stats for this empire. Search the w
       // Standard update path
       const msgStream = client.messages.stream({
         model: 'claude-sonnet-4-5',
-        max_tokens: 10000,
+        max_tokens: 4000,
         system: STATS_SYSTEM,
         messages: [{ role: 'user', content: userContent }],
       });
