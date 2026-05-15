@@ -623,7 +623,7 @@ export default function GMPage() {
             if (event.type === 'start') {
               setStatsLog(l => [...l, `Generating stats for ${event.total} empires…`]);
             } else if (event.type === 'empire_start') {
-              setStatsLog(l => [...l, `  ⟳ ${event.empire}${event.isInitial ? ' (web search baseline)' : ''}`]);
+              setStatsLog(l => [...l, `  ⟳ ${event.empire}${event.isInitial ? ' (baseline)' : ''}`]);
             } else if (event.type === 'empire_done') {
               setStatsLog(l => [...l, `  ✓ ${event.empire}`]);
             } else if (event.type === 'skipped') {
