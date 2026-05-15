@@ -161,6 +161,10 @@ export default function GMPage() {
   // Stats generation
   const [statsLog, setStatsLog] = useState<string[]>([]);
   const [statsForceInitial, setStatsForceInitial] = useState(false);
+  const [statsEmpireStatus, setStatsEmpireStatus] = useState<Record<string, 'streaming'|'done'|'error'>>({});
+  const [statsEmpireChars, setStatsEmpireChars] = useState<Record<string, number>>({});
+  const [statsEmpireText, setStatsEmpireText] = useState<Record<string, string>>({});
+  const [statsLiveEmpire, setStatsLiveEmpire] = useState<string>('');
 
   // GM stats viewer
   const [gmStatsYear, setGmStatsYear] = useState<string>('');
@@ -576,6 +580,10 @@ export default function GMPage() {
     setProcessPhase('stats');
     const statsYear = targetYear ?? year - 1;
     setStatsLog([`━━ Empire Statistics — Year ${statsYear} ━━`]);
+    setStatsEmpireStatus({});
+    setStatsEmpireChars({});
+    setStatsEmpireText({});
+    setStatsLiveEmpire('');
     setProcessError('');
 
     const abortController = new AbortController();
@@ -624,12 +632,20 @@ export default function GMPage() {
               setStatsLog(l => [...l, `Generating stats for ${event.total} empires…`]);
             } else if (event.type === 'empire_start') {
               setStatsLog(l => [...l, `  ⟳ ${event.empire}${event.isInitial ? ' (baseline)' : ''}`]);
+              setStatsEmpireStatus(m => ({ ...m, [event.empire]: 'streaming' }));
+              setStatsLiveEmpire(e => e || event.empire);
+            } else if (event.type === 'token') {
+              setStatsEmpireChars(m => ({ ...m, [event.empire]: (m[event.empire] ?? 0) + (event.text?.length ?? 0) }));
+              setStatsEmpireText(m => ({ ...m, [event.empire]: (m[event.empire] ?? '') + (event.text ?? '') }));
             } else if (event.type === 'empire_done') {
               setStatsLog(l => [...l, `  ✓ ${event.empire}`]);
+              setStatsEmpireStatus(m => ({ ...m, [event.empire]: 'done' }));
             } else if (event.type === 'skipped') {
               setStatsLog(l => [...l, `  ↷ ${event.empire} (already has stats — skipped)`]);
+              setStatsEmpireStatus(m => ({ ...m, [event.empire]: 'done' }));
             } else if (event.type === 'empire_error') {
               setStatsLog(l => [...l, `  ✗ ${event.empire} — ${event.error}`]);
+              setStatsEmpireStatus(m => ({ ...m, [event.empire]: 'error' }));
             } else if (event.type === 'done') {
               setStatsLog(l => [...l, `✓ Phase 4 complete. ${event.succeeded} succeeded, ${event.failed} failed.`]);
             } else if (event.type === 'error') {
@@ -1852,6 +1868,29 @@ export default function GMPage() {
                 {statsLog.length > 0 && (
                   <div className="text-xs font-mono space-y-0.5 max-h-40 overflow-y-auto" style={{ color: 'var(--text2)' }}>
                     {statsLog.map((l, i) => <div key={i}>{l}</div>)}
+                  </div>
+                )}
+                {Object.keys(statsEmpireStatus).length > 0 && (
+                  <div className="space-y-2 mt-2">
+                    <div className="flex flex-wrap gap-1">
+                      {Object.entries(statsEmpireStatus).map(([emp, status]) => (
+                        <button key={emp} onClick={() => setStatsLiveEmpire(emp)}
+                          className="text-xs px-2 py-0.5 rounded font-mono"
+                          style={{
+                            background: statsLiveEmpire === emp ? 'var(--accent)' : 'var(--surface2)',
+                            color: statsLiveEmpire === emp ? '#000' : status === 'done' ? 'var(--success)' : status === 'error' ? 'var(--danger)' : 'var(--accent)',
+                            opacity: status === 'done' ? 0.6 : 1,
+                          }}>
+                          {status === 'done' ? '✓' : status === 'error' ? '✗' : '⟳'} {emp} {statsEmpireChars[emp] ? `(${statsEmpireChars[emp]}ch)` : ''}
+                        </button>
+                      ))}
+                    </div>
+                    {statsLiveEmpire && statsEmpireText[statsLiveEmpire] && (
+                      <pre className="text-xs font-mono p-2 rounded overflow-auto max-h-48 whitespace-pre-wrap break-all"
+                        style={{ background: 'var(--surface2)', color: 'var(--text2)' }}>
+                        {statsEmpireText[statsLiveEmpire]}
+                      </pre>
+                    )}
                   </div>
                 )}
               </div>
