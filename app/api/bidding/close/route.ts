@@ -102,7 +102,6 @@ export async function POST(req: NextRequest) {
 
 // ── GET — diagnostic: compare bids vs current map ────────────────────────────
 export async function GET(req: NextRequest) {
-  if (!extractGMToken(req)) return NextResponse.json({ error: 'GM auth required' }, { status: 401 });
 
   const gameId = getGameId(req);
   const k = gk(gameId);
