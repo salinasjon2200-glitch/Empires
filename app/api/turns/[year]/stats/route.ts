@@ -175,8 +175,13 @@ IMPORTANT: This is the FIRST time generating stats for this empire. Search the w
       }
     }
 
-    // Parse JSON — strip any accidental markdown fences
-    const jsonStr = rawJson.replace(/^```(?:json)?\n?/m, '').replace(/\n?```$/m, '').trim();
+    // Parse JSON — strip markdown fences, then extract the { } block from any surrounding prose
+    let jsonStr = rawJson.replace(/```(?:json)?\n?/g, '').replace(/\n?```/g, '').trim();
+    const firstBrace = jsonStr.indexOf('{');
+    const lastBrace = jsonStr.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+      jsonStr = jsonStr.slice(firstBrace, lastBrace + 1);
+    }
     const parsed = JSON.parse(jsonStr);
 
     const stats: EmpireStats = {
