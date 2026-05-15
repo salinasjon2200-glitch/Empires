@@ -137,41 +137,17 @@ Generate the empire statistics JSON for Year ${year}. The year is ${year} — ma
   try {
     let rawJson = '';
 
-    if (isInitial && !prevStats) {
-      // Web-search path: use real-world 2025 data as baseline
-      const resp = await (client.beta.messages as unknown as {
-        create: (params: object) => Promise<{ content: Array<{ type: string; text?: string }> }>;
-      }).create({
-        model: 'claude-sonnet-4-5',
-        max_tokens: 4000,
-        betas: ['web-search-2025-03-05'],
-        system: STATS_SYSTEM,
-        tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 2 }],
-        messages: [{
-          role: 'user',
-          content: `${userContent}
+    const msgStream = client.messages.stream({
+      model: 'claude-sonnet-4-5',
+      max_tokens: 4000,
+      system: STATS_SYSTEM,
+      messages: [{ role: 'user', content: userContent }],
+    });
 
-IMPORTANT: This is the FIRST time generating stats for this empire. Search the web for current (2025) real-world economic and military data for the territories this empire controls. Use that as the starting baseline, then apply any changes from this year's Perfect Knowledge document.`,
-        }],
-      });
-      // Extract text blocks from response
-      for (const block of resp.content) {
-        if (block.type === 'text' && block.text) rawJson += block.text;
-      }
-    } else {
-      // Standard update path
-      const msgStream = client.messages.stream({
-        model: 'claude-sonnet-4-5',
-        max_tokens: 4000,
-        system: STATS_SYSTEM,
-        messages: [{ role: 'user', content: userContent }],
-      });
-
-      for await (const event of msgStream) {
-        if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-          rawJson += event.delta.text;
-          send({ type: 'token', empire: player.empire, text: event.delta.text });
-        }
+    for await (const event of msgStream) {
+      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+        rawJson += event.delta.text;
+        send({ type: 'token', empire: player.empire, text: event.delta.text });
       }
     }
 
