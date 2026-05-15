@@ -16,6 +16,32 @@ export async function POST(req: NextRequest) {
     const player = players.find(p => p.empire.toLowerCase() === empireName.toLowerCase());
     if (!player) return NextResponse.json({ error: 'Empire not found' }, { status: 404 });
 
+    // Merged empire: try each leader's password
+    if (player.isMerged && player.leaders?.length) {
+      for (const leader of player.leaders) {
+        const valid = await verifyPassword(password, leader.passwordHash);
+        if (valid) {
+          const token = await createSession(leader.name, player.empire, player.color, {
+            isMergedLeader: true,
+            leaderWeight: leader.weight,
+          });
+          return NextResponse.json({
+            sessionToken: token,
+            playerName: leader.name,
+            empireName: player.empire,
+            color: player.color,
+            territories: player.territories,
+            status: player.status,
+            eliminatedYear: player.eliminatedYear,
+            isMergedLeader: true,
+            leaderWeight: leader.weight,
+            allLeaders: player.leaders.map(l => ({ name: l.name, weight: l.weight })),
+          });
+        }
+      }
+      return NextResponse.json({ error: 'Invalid leader password' }, { status: 401 });
+    }
+
     const valid = await verifyPassword(password, player.passwordHash);
     if (!valid) return NextResponse.json({ error: 'Invalid empire password' }, { status: 401 });
 

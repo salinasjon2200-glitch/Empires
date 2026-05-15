@@ -29,20 +29,28 @@ export async function POST(req: NextRequest) {
   const playerList = activePlayers.map(p => `- ${p.empire} (${p.name}, color: ${p.color})`).join('\n');
   const currentMapJson = JSON.stringify(currentTerritories, null, 2);
 
-  const prompt = `You are updating the territory map for a grand strategy game.
+  const prompt = `You are updating the territory map for a grand strategy game. The GM has given you an instruction — apply it and output the result as JSON. You MUST always output a JSON block, no matter what.
 
-Active empires:
+Active empires and their current colors:
 ${playerList}
 
-Current territory map:
+Current territory map (JSON):
 \`\`\`json
 ${currentMapJson}
 \`\`\`
 
-The GM has described the following territorial changes:
+GM instruction:
 "${description}"
 
-Output ONLY a JSON block (fenced with \`\`\`json and \`\`\`) containing the COMPLETE updated territory map. Include all existing territories with any changes applied. Use this exact structure:
+Apply the instruction. If the instruction is vague (e.g. "make it brighter", "a cooler color", "something green"), make a specific creative choice and use it — do NOT ask for clarification, do NOT explain your choice outside the JSON block. Just pick a concrete hex value and apply it.
+
+Examples of changes you might make:
+- Territorial transfer: update the "empire" and "leader" fields for affected countries
+- Color change: update the "color" hex for ALL territories belonging to the named empire. If asked for "brighter", pick a visibly brighter variant of the current color. If asked for a general color (e.g. "green"), pick a vivid appropriate hex.
+- Status change: set "status" to "contested" or "ungoverned"
+- Leader/empire rename: update "leader" or "empire" fields
+
+Output ONLY a \`\`\`json ... \`\`\` block containing the COMPLETE updated territory map with ALL existing territories included (modified or not):
 \`\`\`json
 {
   "territories": {
@@ -52,26 +60,57 @@ Output ONLY a JSON block (fenced with \`\`\`json and \`\`\`) containing the COMP
 }
 \`\`\`
 
-Status values: "active" (owned by empire), "contested", "ungoverned". Omit countries with no owner.
-Use the exact empire colors listed above. Do not add commentary outside the JSON block.`;
+Rules:
+- status values: "active" (empire-owned), "contested", "ungoverned"
+- Omit countries with no owner/status
+- CRITICAL: Output ONLY the JSON block — zero prose, zero explanation outside the fenced block`;
 
   const message = await client.messages.create({
     model: 'claude-opus-4-6',
-    max_tokens: 4000,
+    max_tokens: 16000,
     messages: [{ role: 'user', content: prompt }],
   });
 
   const text = message.content[0].type === 'text' ? message.content[0].text : '';
-  const jsonMatch = text.match(/```json\s*([\s\S]*?)```/);
-  if (!jsonMatch) {
-    return NextResponse.json({ error: 'AI did not return valid JSON', raw: text }, { status: 500 });
+  // Try fenced block first, then bare JSON object as fallback
+  const fenceMatch = text.match(/```json\s*([\s\S]*?)```/);
+  const rawJson = fenceMatch ? fenceMatch[1] : text.match(/\{[\s\S]*/)?.[0] ?? '';
+  if (!rawJson) {
+    return NextResponse.json({ error: 'AI did not return valid JSON', raw: text.slice(0, 500) }, { status: 500 });
+  }
+
+  // Repair truncated JSON: strip trailing garbage, then close any unclosed braces/brackets
+  function repairJson(s: string): string {
+    // Remove trailing stray characters after the last valid value char
+    s = s.replace(/[,\s"]+$/, '');
+    // Balance braces and brackets
+    const opens: string[] = [];
+    let inString = false;
+    let escape = false;
+    for (const ch of s) {
+      if (escape) { escape = false; continue; }
+      if (ch === '\\' && inString) { escape = true; continue; }
+      if (ch === '"') { inString = !inString; continue; }
+      if (inString) continue;
+      if (ch === '{' || ch === '[') opens.push(ch);
+      if (ch === '}' && opens[opens.length - 1] === '{') opens.pop();
+      if (ch === ']' && opens[opens.length - 1] === '[') opens.pop();
+    }
+    for (let i = opens.length - 1; i >= 0; i--) {
+      s += opens[i] === '{' ? '}' : ']';
+    }
+    return s;
   }
 
   let parsed: { territories: TerritoryMap };
   try {
-    parsed = JSON.parse(jsonMatch[1]);
+    parsed = JSON.parse(rawJson);
   } catch {
-    return NextResponse.json({ error: 'Failed to parse AI JSON', raw: jsonMatch[1] }, { status: 500 });
+    try {
+      parsed = JSON.parse(repairJson(rawJson));
+    } catch {
+      return NextResponse.json({ error: 'Failed to parse AI JSON', raw: rawJson.slice(0, 500) }, { status: 500 });
+    }
   }
 
   const newTerritories = parsed.territories ?? {};

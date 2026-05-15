@@ -120,7 +120,8 @@ export default function WorldMap({ territories = {}, bids = {}, mode = 'territor
     if (selectedCountry && gameName === selectedCountry) return '#00d4ff55';
     if (mode === 'bidding') {
       const key = matchCountry(geoName, geoId, bids);
-      if (key && bids[key]) return (bids[key] as { color: string }).color + 'b3';
+      const leaders = key ? (bids[key] as unknown as Array<{ color: string }>) : null;
+      if (leaders && leaders.length > 0) return leaders[0].color + 'b3';
       return '#1e3a5f';
     }
     const key = matchCountry(geoName, geoId, territories);
@@ -141,7 +142,8 @@ export default function WorldMap({ territories = {}, bids = {}, mode = 'territor
     if (selectedCountry && gameName === selectedCountry) return '#00d4ff';
     if (mode === 'bidding') {
       const key = matchCountry(geoName, geoId, bids);
-      if (key && bids[key]) return (bids[key] as { color: string }).color;
+      const leaders = key ? (bids[key] as unknown as Array<{ color: string }>) : null;
+      if (leaders && leaders.length > 0) return leaders[0].color;
       return '#1e3a5f';
     }
     const key = matchCountry(geoName, geoId, territories);
@@ -155,9 +157,10 @@ export default function WorldMap({ territories = {}, bids = {}, mode = 'territor
   function getTooltip(geoName: string, geoId: number): string {
     if (mode === 'bidding') {
       const key = matchCountry(geoName, geoId, bids);
-      if (key && bids[key]) {
-        const b = bids[key] as { empireName: string; amount: number };
-        return `${geoName} — Leader: ${b.empireName} (${b.amount} pts)`;
+      const leaders = key ? (bids[key] as unknown as Array<{ empireName: string; amount: number }>) : null;
+      if (leaders && leaders.length > 0) {
+        if (leaders.length === 1) return `${geoName} — Leader: ${leaders[0].empireName} (${leaders[0].amount} pts)`;
+        return `${geoName} — ${leaders.length}-way tie at ${leaders[0].amount} pts`;
       }
       return `${geoName} — No bids`;
     }

@@ -1,12 +1,12 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import ChatSidebar from '@/components/ChatSidebar';
 import Link from 'next/link';
 
 const WorldMap = dynamic(() => import('@/components/WorldMap'), { ssr: false });
 
-interface Session { playerName: string; empireName: string; color: string; sessionToken: string; status: string; eliminatedYear?: number; }
+interface Session { playerName: string; empireName: string; color: string; sessionToken: string; status: string; eliminatedYear?: number; isMergedLeader?: boolean; leaderWeight?: number; allLeaders?: { name: string; weight: number }[]; }
 interface Player { name: string; empire: string; color: string; status: string; }
 
 export default function SubmitPage() {
@@ -17,15 +17,20 @@ export default function SubmitPage() {
   const [year, setYear] = useState(2032);
   const [actionText, setActionText] = useState('');
   const [justSubmitted, setJustSubmitted] = useState(false); // optimistic flag for this session only
+  const yearRef = useRef(2032);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [editing, setEditing] = useState(false);
   const [warChest, setWarChest] = useState<{ balance: number; threshold: number; contributions: Array<{ name: string; amount: number; timestamp: number }>; lastTurnCost: number } | null>(null);
   const [countdown, setCountdown] = useState(0);
   const [lastTurnAt, setLastTurnAt] = useState<number | null>(null);
+  const [biddingLive, setBiddingLive] = useState(false);
 
   useEffect(() => {
     const stored = localStorage.getItem('empires-player');
     if (stored) try { setSession(JSON.parse(stored)); } catch {}
+
+    fetch('/api/bidding/state').then(r => r.ok ? r.json() : null).then(d => { if (d) setBiddingLive(d.open ?? false); }).catch(() => {});
 
     Promise.all([
       fetch('/api/map/territories').then(r => r.json()),
@@ -36,6 +41,7 @@ export default function SubmitPage() {
       setPlayers(playerData.players ?? []);
       const yr = state.currentYear ?? 2032;
       setYear(yr);
+      yearRef.current = yr;
       if (state.lastTurnCompletedAt) setLastTurnAt(state.lastTurnCompletedAt);
 
       // Load submission status from server (authoritative — do not use localStorage)
@@ -50,12 +56,31 @@ export default function SubmitPage() {
     fetch('/api/war-chest').then(r => r.json()).then(d => setWarChest(d.warChest)).catch(() => {});
   }, []);
 
-  // Poll submission status every 15s — server is the only source of truth
+  // Poll submission status + year every 15s — server is the only source of truth
   useEffect(() => {
-    const poll = () => {
-      fetch('/api/turns/status').then(r => r.ok ? r.json() : null).then(d => {
-        if (d?.submitted) setSubmittedNames(new Set(d.submitted));
-      }).catch(() => {});
+    const poll = async () => {
+      try {
+        const d = await fetch('/api/turns/status').then(r => r.ok ? r.json() : null);
+        if (!d) return;
+        setSubmittedNames(new Set(d.submitted ?? []));
+        const serverYear: number = d.year ?? yearRef.current;
+        if (serverYear !== yearRef.current) {
+          // Year has advanced — new turn is open
+          yearRef.current = serverYear;
+          setYear(serverYear);
+          setJustSubmitted(false);
+          setActionText('');
+          // Refresh map and players for the new year
+          const [mapR, playersR] = await Promise.all([
+            fetch('/api/map/territories').then(r => r.json()),
+            fetch('/api/game/players').then(r => r.json()),
+          ]);
+          setTerritories(mapR.territories ?? {});
+          setPlayers(playersR.players ?? []);
+          // Refresh war chest
+          fetch('/api/war-chest').then(r => r.json()).then(wc => setWarChest(wc.warChest)).catch(() => {});
+        }
+      } catch {}
     };
     const id = setInterval(poll, 15000);
     return () => clearInterval(id);
@@ -65,7 +90,8 @@ export default function SubmitPage() {
   useEffect(() => {
     if (!lastTurnAt) return;
     const interval = setInterval(() => {
-      const remaining = (lastTurnAt + 24 * 60 * 60 * 1000) - Date.now();
+      const next3PM = new Date(lastTurnAt); next3PM.setDate(next3PM.getDate() + 1); next3PM.setHours(15, 0, 0, 0);
+      const remaining = next3PM.getTime() - Date.now();
       setCountdown(Math.max(0, remaining));
     }, 1000);
     return () => clearInterval(interval);
@@ -81,17 +107,35 @@ export default function SubmitPage() {
     });
     const d = await r.json();
     if (r.ok) {
-      // Update submittedNames so the sidebar reflects it immediately
       if (session) setSubmittedNames(prev => { const s = new Set(Array.from(prev)); s.add(session.playerName); return s; });
       setJustSubmitted(true);
+      setEditing(false);
     } else {
       setError(d.error ?? 'Submission failed');
     }
     setLoading(false);
   }
 
-  // submitted = true only if the SERVER confirms this player has submitted
-  const submitted = justSubmitted || (!!session && submittedNames.has(session.playerName));
+  async function startEditing() {
+    if (!session) return;
+    setEditing(true);
+    if (!actionText.trim()) {
+      // Fetch their saved action to pre-fill the textarea
+      try {
+        const r = await fetch('/api/turns/actions', {
+          headers: { 'Authorization': `Bearer ${session.sessionToken}` },
+        });
+        if (r.ok) {
+          const d = await r.json();
+          if (d.action) setActionText(d.action);
+        }
+      } catch {}
+    }
+  }
+
+  // For merged leaders, submission is tracked under the empire name
+  const submissionKey = session?.isMergedLeader ? session.empireName : session?.playerName ?? '';
+  const submitted = justSubmitted || (!!session && submittedNames.has(submissionKey));
 
   // Eliminated screen
   if (session?.status === 'eliminated') {
@@ -133,9 +177,23 @@ export default function SubmitPage() {
           </div>
           <div className="flex gap-3">
             <Link href="/results" className="btn-ghost text-sm">Results →</Link>
+            <Link href="/warchest" className="btn-ghost text-sm">💰 War Chest</Link>
             <Link href="/gm" className="btn-ghost text-sm">GM</Link>
           </div>
         </div>
+
+        {biddingLive && session && (
+          <div className="card flex items-center justify-between gap-3" style={{ borderColor: 'var(--accent)', background: 'rgba(0,212,255,0.05)' }}>
+            <div className="flex items-center gap-3">
+              <span className="inline-block w-2 h-2 rounded-full animate-pulse flex-shrink-0" style={{ background: 'var(--accent)' }} />
+              <div>
+                <p className="font-semibold text-sm display-font" style={{ color: 'var(--accent)', letterSpacing: '0.06em' }}>TERRITORY BIDDING IS LIVE</p>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--text2)' }}>Bidding is open. Place or raise bids before time runs out.</p>
+              </div>
+            </div>
+            <Link href="/bid" className="btn-primary text-sm flex-shrink-0">Bid Now →</Link>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
@@ -165,15 +223,39 @@ export default function SubmitPage() {
                 <p style={{ color: 'var(--text2)' }}>You must authenticate to submit actions.</p>
                 <Link href="/login" className="btn-primary inline-block mt-4">Empire Login</Link>
               </div>
-            ) : submitted ? (
-              <div className="card text-center py-8 space-y-3">
+            ) : submitted && !editing ? (
+              <div className="card text-center py-8 space-y-4">
                 <div className="text-4xl">✅</div>
                 <p className="text-lg font-semibold success">Actions Declared</p>
+                {session?.isMergedLeader && (
+                  <p className="text-sm" style={{ color: 'var(--text2)' }}>
+                    Your orders as <strong>{session.playerName}</strong> (weight: {session.leaderWeight}/100) have been logged.
+                  </p>
+                )}
                 <p style={{ color: 'var(--text2)' }}>Your orders for Year {year} have been logged. Await the GM's processing.</p>
+                <button className="btn-ghost text-sm" onClick={startEditing}>
+                  ✏️ Edit Actions
+                </button>
               </div>
             ) : (
               <div className="card space-y-4">
-                <p className="label">Declare Your Actions for Year {year}</p>
+                {session?.isMergedLeader && (
+                  <div className="rounded px-3 py-2 text-sm space-y-1" style={{ background: 'var(--surface2)', border: '1px solid var(--accent)' }}>
+                    <p><span style={{ color: 'var(--accent)' }}>⚔️ Merged Empire:</span> <strong>{session.empireName}</strong></p>
+                    <p style={{ color: 'var(--text2)' }}>
+                      You are <strong>{session.playerName}</strong> — Action Weight: <strong>{session.leaderWeight}/100</strong>
+                    </p>
+                    {session.allLeaders && session.allLeaders.length > 1 && (
+                      <p className="text-xs" style={{ color: 'var(--text2)' }}>
+                        Co-leaders: {session.allLeaders.filter(l => l.name !== session.playerName).map(l => `${l.name} (${l.weight}/100)`).join(', ')}
+                      </p>
+                    )}
+                    <p className="text-xs" style={{ color: 'var(--text2)' }}>
+                      Where your actions contradict your co-leaders, the higher-weighted leader wins.
+                    </p>
+                  </div>
+                )}
+                <p className="label">{editing ? `Edit Your Actions for Year ${year}` : `Declare Your Actions for Year ${year}`}</p>
                 <p className="text-sm" style={{ color: 'var(--text2)' }}>
                   Describe everything your empire does this year. Be specific. The AI GM evaluates all actions for realism.
                   Fantasy and impossible actions will be rejected or downscaled.
@@ -186,10 +268,19 @@ export default function SubmitPage() {
                   onChange={e => setActionText(e.target.value)}
                 />
                 {error && <p className="danger text-sm">{error}</p>}
-                <button className="btn-primary w-full" onClick={submitAction} disabled={loading || !actionText.trim()}>
-                  {loading ? 'Submitting...' : 'Declare Actions'}
-                </button>
-                <p className="text-xs" style={{ color: 'var(--text2)' }}>⚠️ Actions are final once submitted. No edits allowed.</p>
+                <div className="flex gap-3">
+                  {editing && (
+                    <button className="btn-ghost flex-1" onClick={() => setEditing(false)}>
+                      Cancel
+                    </button>
+                  )}
+                  <button className="btn-primary flex-1" onClick={submitAction} disabled={loading || !actionText.trim()}>
+                    {loading ? 'Saving...' : editing ? 'Save Changes' : 'Declare Actions'}
+                  </button>
+                </div>
+                {editing && (
+                  <p className="text-xs" style={{ color: 'var(--accent)' }}>⚠️ Saving will overwrite your previous submission.</p>
+                )}
               </div>
             )}
           </div>
@@ -234,7 +325,10 @@ export default function SubmitPage() {
             {/* War Chest */}
             {warChest && (
               <div className="card space-y-3">
-                <p className="label mb-1">Community War Chest</p>
+                <div className="flex items-center justify-between">
+                  <p className="label">💰 Community War Chest</p>
+                  <Link href="/warchest" className="text-xs" style={{ color: 'var(--accent)' }}>Full history →</Link>
+                </div>
                 <div className="flex justify-between items-end">
                   <span className="text-lg font-bold display-font" style={{ color: warChest.balance >= warChest.threshold ? 'var(--success)' : 'var(--accent)' }}>
                     ${warChest.balance.toFixed(2)}
@@ -252,22 +346,26 @@ export default function SubmitPage() {
                 </div>
                 <p className="text-xs" style={{ color: 'var(--text2)' }}>
                   {warChest.balance >= warChest.threshold
-                    ? 'Threshold met — GM can process turn'
+                    ? '✅ Threshold met — GM can process turn'
                     : `$${(warChest.threshold - warChest.balance).toFixed(2)} more needed to run next turn`}
                 </p>
-                {warChest.contributions.length > 0 && (
-                  <div className="space-y-1">
-                    <p className="label" style={{ fontSize: '0.6rem' }}>Recent Contributors</p>
-                    {[...warChest.contributions].reverse().slice(0, 5).map((c, i) => (
-                      <p key={i} className="text-xs" style={{ color: 'var(--text2)' }}>{c.name} — ${Number(c.amount).toFixed(2)}</p>
-                    ))}
-                  </div>
-                )}
                 {countdown > 0 && (
                   <p className="text-xs" style={{ color: 'var(--text2)' }}>
                     Next turn in: {Math.floor(countdown / 3600000)}h {Math.floor((countdown % 3600000) / 60000)}m
                   </p>
                 )}
+                <a
+                  href="https://www.patreon.com/c/empires438/posts"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn-primary w-full text-sm text-center block"
+                  style={{ textDecoration: 'none' }}
+                >
+                  🎖️ Support on Patreon
+                </a>
+                <p className="text-xs" style={{ color: 'var(--text2)' }}>
+                  ⚠️ Contributions won't appear immediately — message the GM in chat with your Patreon account name to verify. Funds added within 24 hours.
+                </p>
               </div>
             )}
           </div>

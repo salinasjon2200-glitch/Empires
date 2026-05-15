@@ -64,6 +64,39 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ ok: true, warChest: chest });
 }
 
+// GM manual deduction (negative contribution — logged in history)
+export async function DELETE(req: NextRequest) {
+  if (!extractGMToken(req)) return NextResponse.json({ error: 'GM auth required' }, { status: 401 });
+
+  const gameId = getGameId(req);
+  const k = gk(gameId);
+
+  const { amount, reason } = await req.json();
+  if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
+    return NextResponse.json({ error: 'Invalid amount' }, { status: 400 });
+  }
+
+  const players = await dbGet<Player[]>(k('game:players')) ?? [];
+  const threshold = players.filter(p => p.status === 'active').length * 0.25;
+
+  const chest = await dbGet<WarChest>(k('war:chest')) ?? {
+    balance: 0, threshold, contributions: [], lastTurnCost: 0, lastUpdated: Date.now(),
+  };
+
+  chest.balance = Math.max(0, Math.round((chest.balance - Number(amount)) * 100) / 100);
+  chest.threshold = threshold;
+  chest.contributions.push({
+    name: reason || 'GM Deduction',
+    amount: -Number(amount),
+    method: 'deduction',
+    timestamp: Date.now(),
+  });
+  chest.lastUpdated = Date.now();
+
+  await dbSet(k('war:chest'), chest);
+  return NextResponse.json({ ok: true, warChest: chest });
+}
+
 // Called after processing to deduct actual API cost
 export async function PATCH(req: NextRequest) {
   if (!extractGMToken(req)) return NextResponse.json({ error: 'GM auth required' }, { status: 401 });

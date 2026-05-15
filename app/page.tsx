@@ -44,8 +44,6 @@ export default function LandingPage() {
             <Link href="/map" className="text-xs" style={{ color: 'var(--text2)' }}>World Map</Link>
             {' · '}
             <Link href="/vote" className="text-xs" style={{ color: 'var(--text2)' }}>Theme Vote</Link>
-            {' · '}
-            <Link href="/gm" className="text-xs" style={{ color: 'var(--text2)' }}>GM Dashboard</Link>
           </div>
         </div>
 

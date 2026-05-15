@@ -16,6 +16,7 @@ export default function ChatSidebar({ sessionToken, playerName, empireName, colo
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<Tab>('global');
   const [unreadTotal, setUnreadTotal] = useState(0);
+  const [unreadBreakdown, setUnreadBreakdown] = useState<Record<string, number>>({});
 
   // Global
   const [publicMsgs, setPublicMsgs] = useState<ChatMessage[]>([]);
@@ -66,8 +67,9 @@ export default function ChatSidebar({ sessionToken, playerName, empireName, colo
     const poll = async () => {
       const r = await fetch('/api/chat/unread', { headers: headers() });
       if (r.ok) {
-        const { total } = await r.json();
+        const { total, unread } = await r.json();
         setUnreadTotal(total);
+        if (unread) setUnreadBreakdown(unread);
       }
     };
     poll();
@@ -77,7 +79,7 @@ export default function ChatSidebar({ sessionToken, playerName, empireName, colo
 
   // Poll direct chat when active
   useEffect(() => {
-    if (!directTarget || !sessionToken) return;
+    if (!directTarget || (!sessionToken && !gmPassword)) return;
     directAfter.current = 0;
     setDirectMsgs([]);
     const poll = async () => {
@@ -140,14 +142,16 @@ export default function ChatSidebar({ sessionToken, playerName, empireName, colo
   }
 
   async function sendDirect() {
-    if (!directInput.trim() || !directTarget || !sessionToken) return;
+    if (!directInput.trim() || !directTarget) return;
+    const authToken = sessionToken ?? gmPassword;
+    if (!authToken) return;
     const text = directInput.trim();
     setDirectInput('');
     const optimistic: ChatMessage = {
       id: 'tmp-' + Date.now(),
-      senderName: playerName ?? '',
-      empireName: empireName ?? '',
-      color: color ?? '#888',
+      senderName: playerName ?? 'Game Master',
+      empireName: empireName ?? 'GM',
+      color: color ?? '#ffffff',
       text,
       timestamp: Date.now(),
     };
@@ -155,7 +159,7 @@ export default function ChatSidebar({ sessionToken, playerName, empireName, colo
     directAfter.current = Math.max(directAfter.current, optimistic.timestamp);
     await fetch('/api/chat/private', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}` },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
       body: JSON.stringify({ text, receiverName: directTarget }),
     });
   }
@@ -197,8 +201,13 @@ export default function ChatSidebar({ sessionToken, playerName, empireName, colo
       <button
         onClick={() => setOpen(o => !o)}
         className="fixed bottom-6 right-6 z-40 w-12 h-12 rounded-full flex items-center justify-center shadow-lg transition-all"
-        style={{ background: 'var(--accent)', color: 'var(--bg)' }}
-        title="Toggle chat"
+        style={{
+          background: 'var(--accent)',
+          color: 'var(--bg)',
+          animation: !open && unreadTotal > 0 ? 'pulse 1.5s infinite' : 'none',
+          boxShadow: !open && unreadTotal > 0 ? '0 0 0 4px rgba(239,68,68,0.3)' : undefined,
+        }}
+        title={unreadTotal > 0 ? `${unreadTotal} unread message${unreadTotal > 1 ? 's' : ''}` : 'Toggle chat'}
       >
         {open ? '✕' : '💬'}
         {!open && unreadTotal > 0 && (
@@ -223,23 +232,94 @@ export default function ChatSidebar({ sessionToken, playerName, empireName, colo
             <button onClick={() => setOpen(false)} style={{ color: 'var(--text2)' }}>✕</button>
           </div>
 
+          {/* Unread notifications strip */}
+          {(() => {
+            const unreadDirect = Object.entries(unreadBreakdown)
+              .filter(([k, v]) => k.startsWith('private:') && v > 0)
+              .map(([k, v]) => ({ senderName: k.slice('private:'.length), count: v }));
+            const unreadGroups = Object.entries(unreadBreakdown)
+              .filter(([k, v]) => k.startsWith('group:') && v > 0)
+              .map(([k, v]) => ({ groupId: k.slice('group:'.length), count: v }));
+            if (unreadDirect.length === 0 && unreadGroups.length === 0) return null;
+            return (
+              <div style={{ background: 'var(--surface2)', borderBottom: '1px solid var(--border)', padding: '0.5rem 0.75rem' }}>
+                <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: 'var(--accent)' }}>
+                  🔔 New Messages
+                </p>
+                <div className="space-y-1">
+                  {unreadDirect.map(({ senderName, count }) => {
+                    const p = allPlayers.find(p => p.name === senderName);
+                    return (
+                      <button
+                        key={senderName}
+                        className="w-full flex items-center gap-2 text-left rounded px-2 py-1 transition-colors"
+                        style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
+                        onClick={() => { setTab('direct'); setDirectTarget(senderName); }}
+                      >
+                        <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: p?.color ?? '#888' }} />
+                        <span className="text-xs flex-1 truncate font-medium">{p?.empire ?? senderName}</span>
+                        <span className="text-xs font-bold rounded-full px-1.5 py-0.5" style={{ background: 'var(--danger)', color: '#fff', fontSize: '0.6rem' }}>
+                          {count > 9 ? '9+' : count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                  {unreadGroups.map(({ groupId, count }) => {
+                    const g = groups.find(g => g.id === groupId);
+                    return (
+                      <button
+                        key={groupId}
+                        className="w-full flex items-center gap-2 text-left rounded px-2 py-1 transition-colors"
+                        style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
+                        onClick={() => { setTab('groups'); setActiveGroup(g ?? null); }}
+                      >
+                        <span className="text-xs">🔗</span>
+                        <span className="text-xs flex-1 truncate font-medium">{g?.name ?? groupId}</span>
+                        <span className="text-xs font-bold rounded-full px-1.5 py-0.5" style={{ background: 'var(--danger)', color: '#fff', fontSize: '0.6rem' }}>
+                          {count > 9 ? '9+' : count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Tabs */}
-          <div className="flex" style={{ borderBottom: '1px solid var(--border)' }}>
-            {(['global', 'direct', 'groups'] as Tab[]).map(t => (
-              <button
-                key={t}
-                onClick={() => setTab(t)}
-                className="flex-1 py-2 text-xs font-semibold uppercase tracking-wide transition-colors"
-                style={{
-                  color: tab === t ? 'var(--accent)' : 'var(--text2)',
-                  borderBottom: tab === t ? '2px solid var(--accent)' : '2px solid transparent',
-                  background: 'transparent',
-                }}
-              >
-                {t === 'global' ? 'Global' : t === 'direct' ? 'Direct' : 'Intel Network'}
-              </button>
-            ))}
-          </div>
+          {(() => {
+            const directUnread = Object.entries(unreadBreakdown).filter(([k]) => k.startsWith('private:')).reduce((s, [, v]) => s + v, 0);
+            const groupUnread = Object.entries(unreadBreakdown).filter(([k]) => k.startsWith('group:')).reduce((s, [, v]) => s + v, 0);
+            const tabLabels: Record<Tab, { label: string; badge: number }> = {
+              global: { label: 'Global', badge: 0 },
+              direct: { label: 'Direct', badge: directUnread },
+              groups: { label: 'Intel Network', badge: groupUnread },
+            };
+            return (
+              <div className="flex" style={{ borderBottom: '1px solid var(--border)' }}>
+                {(['global', 'direct', 'groups'] as Tab[]).map(t => (
+                  <button
+                    key={t}
+                    onClick={() => setTab(t)}
+                    className="flex-1 py-2 text-xs font-semibold uppercase tracking-wide transition-colors relative"
+                    style={{
+                      color: tab === t ? 'var(--accent)' : 'var(--text2)',
+                      borderBottom: tab === t ? '2px solid var(--accent)' : '2px solid transparent',
+                      background: 'transparent',
+                    }}
+                  >
+                    {tabLabels[t].label}
+                    {tabLabels[t].badge > 0 && (
+                      <span className="ml-1 inline-flex items-center justify-center rounded-full font-bold"
+                        style={{ background: 'var(--danger)', color: '#fff', fontSize: '0.6rem', width: '1.1rem', height: '1.1rem', verticalAlign: 'middle' }}>
+                        {tabLabels[t].badge > 9 ? '9+' : tabLabels[t].badge}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            );
+          })()}
 
           {/* Content */}
           <div className="flex-1 overflow-hidden flex flex-col">
@@ -260,20 +340,32 @@ export default function ChatSidebar({ sessionToken, playerName, empireName, colo
                 {!directTarget ? (
                   <div className="p-4 space-y-2 overflow-y-auto flex-1">
                     <p className="text-xs mb-3" style={{ color: 'var(--text2)' }}>Select an empire to open a direct channel:</p>
-                    {allPlayers.filter(p => p.name !== playerName).map(p => (
-                      <button
-                        key={p.name}
-                        className="w-full text-left px-3 py-2 rounded flex items-center gap-3 transition-colors"
-                        style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}
-                        onClick={() => setDirectTarget(p.name)}
-                      >
-                        <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: p.color }} />
-                        <div>
-                          <div className="text-sm font-semibold">{p.empire}</div>
-                          <div className="text-xs" style={{ color: 'var(--text2)' }}>{p.name}</div>
-                        </div>
-                      </button>
-                    ))}
+                    {allPlayers.filter(p => p.name !== playerName).map(p => {
+                      const pUnread = unreadBreakdown[`private:${p.name}`] ?? 0;
+                      return (
+                        <button
+                          key={p.name}
+                          className="w-full text-left px-3 py-2 rounded flex items-center gap-3 transition-colors"
+                          style={{
+                            background: 'var(--surface2)',
+                            border: pUnread > 0 ? '1px solid var(--accent)' : '1px solid var(--border)',
+                          }}
+                          onClick={() => setDirectTarget(p.name)}
+                        >
+                          <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: p.color }} />
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-semibold">{p.empire}</div>
+                            <div className="text-xs" style={{ color: 'var(--text2)' }}>{p.name}</div>
+                          </div>
+                          {pUnread > 0 && (
+                            <span className="w-5 h-5 rounded-full text-xs flex items-center justify-center font-bold flex-shrink-0"
+                              style={{ background: 'var(--danger)', color: '#fff' }}>
+                              {pUnread > 9 ? '9+' : pUnread}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
                     {allPlayers.filter(p => p.name !== playerName).length === 0 && (
                       <p className="text-xs" style={{ color: 'var(--text2)' }}>No other players found.</p>
                     )}
@@ -368,16 +460,28 @@ function MessageInput({ value, onChange, onSend, placeholder }: {
   placeholder: string;
 }) {
   return (
-    <div className="p-3 flex gap-2" style={{ borderTop: '1px solid var(--border)' }}>
-      <input
-        className="input flex-1 text-sm"
+    <div className="p-3 space-y-2" style={{ borderTop: '1px solid var(--border)' }}>
+      <textarea
+        className="input w-full text-sm"
+        rows={3}
+        style={{ resize: 'none', lineHeight: '1.4', display: 'block' }}
         value={value}
         onChange={e => onChange(e.target.value)}
-        onKeyDown={e => e.key === 'Enter' && !e.shiftKey && onSend()}
+        onKeyDown={e => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            onSend();
+          }
+        }}
         placeholder={placeholder}
       />
-      <button className="btn-primary" onClick={onSend} style={{ padding: '0.4rem 0.75rem', fontSize: '0.75rem' }}>
-        ➤
+      <button
+        type="button"
+        className="btn-primary w-full text-sm"
+        style={{ padding: '0.5rem', touchAction: 'manipulation' }}
+        onClick={onSend}
+      >
+        Send ➤
       </button>
     </div>
   );

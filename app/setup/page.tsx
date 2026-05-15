@@ -13,7 +13,7 @@ interface Bid {
   placedAt: number;
 }
 
-interface BidState { [country: string]: Bid | null; }
+interface BidState { [country: string]: Bid[]; }
 interface PlayerPoints { [name: string]: number; }
 
 export default function SetupPage() {
@@ -193,16 +193,20 @@ export default function SetupPage() {
 
               <div className="space-y-1 max-h-96 overflow-y-auto">
                 {filtered.map(country => {
-                  const bid = bids[country];
-                  const isMine = bid?.playerName === session?.playerName;
+                  const bidders = bids[country] ?? [];
+                  const topBid = bidders[0] ?? null;
+                  const isMine = bidders.some(b => b.playerName === session?.playerName);
+                  const isTied = bidders.length > 1;
                   return (
                     <div key={country} className="flex items-center gap-3 px-3 py-2 rounded" style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}>
-                      <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: bid ? bid.color : 'var(--border)' }} />
+                      <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: topBid ? topBid.color : 'var(--border)' }} />
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-semibold">{country}</div>
-                        {bid ? (
+                        {topBid ? (
                           <div className="text-xs" style={{ color: isMine ? 'var(--success)' : 'var(--text2)' }}>
-                            {isMine ? '✓ You — ' : ''}{bid.empireName}: {bid.amount} pts
+                            {isTied
+                              ? `⚖ ${bidders.length}-way tie — ${topBid.amount} pts`
+                              : `${isMine ? '✓ You — ' : ''}${topBid.empireName}: ${topBid.amount} pts`}
                           </div>
                         ) : (
                           <div className="text-xs" style={{ color: 'var(--text2)' }}>No bids</div>
@@ -213,7 +217,7 @@ export default function SetupPage() {
                           <input
                             type="number"
                             min={10}
-                            max={myPoints + (isMine ? (bid?.amount ?? 0) : 0)}
+                            max={myPoints + (isMine ? (topBid?.amount ?? 0) : 0)}
                             className="input w-20 text-sm py-1"
                             placeholder="pts"
                             value={bidAmounts[country] ?? ''}
@@ -256,7 +260,7 @@ export default function SetupPage() {
                   </div>
                 </div>
                 <div className="mt-3 text-xs" style={{ color: 'var(--text2)' }}>
-                  My active bids: {Object.values(bids).filter(b => b?.playerName === session.playerName).length}
+                  My active bids: {Object.values(bids).filter(bidders => bidders.some(b => b.playerName === session.playerName)).length}
                 </div>
               </div>
             )}

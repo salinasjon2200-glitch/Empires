@@ -27,9 +27,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Empire already exists' }, { status: 409 });
   }
 
+  const state = await dbGet<GameState>(k('game:state'));
   const color = PLAYER_COLORS[players.length % PLAYER_COLORS.length];
   const passwordHash = await hashPassword(password);
-  const newPlayer: Player = { name, empire, email: email || undefined, passwordHash, color, status: 'active', territories: [] };
+  const joinedYear = state?.currentYear ?? 2032;
+  const newPlayer: Player = { name, empire, email: email || undefined, passwordHash, color, status: 'active', joinedYear, territories: [] };
   players.push(newPlayer);
   await dbSet(k('game:players'), players);
 
