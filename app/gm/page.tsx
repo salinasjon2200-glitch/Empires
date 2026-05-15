@@ -678,7 +678,15 @@ export default function GMPage() {
     setGmStatsLoading(true);
     setGmStatsError('');
     setGmStatsData(null);
-    const r = await fetch(`/api/turns/${targetYear}/stats`, { headers: headers() });
+    // Try requested year first; if not found and user didn't specify, also try year-1
+    let r = await fetch(`/api/turns/${targetYear}/stats`, { headers: headers() });
+    let usedYear = targetYear;
+    if (!r.ok && !gmStatsYear && targetYear === year) {
+      // Automatically fall back to previous year
+      const fallback = year - 1;
+      const r2 = await fetch(`/api/turns/${fallback}/stats`, { headers: headers() });
+      if (r2.ok) { r = r2; usedYear = fallback; }
+    }
     if (!r.ok) {
       const d = await r.json().catch(() => ({}));
       setGmStatsError(d.error ?? `No stats found for Year ${targetYear}.`);
@@ -687,8 +695,9 @@ export default function GMPage() {
       const statsObj = d.stats ?? {};
       const empires = Object.keys(statsObj);
       if (empires.length === 0) {
-        setGmStatsError(`No empire stats have been generated for Year ${targetYear} yet.`);
+        setGmStatsError(`No empire stats have been generated for Year ${usedYear} yet.`);
       } else {
+        if (usedYear !== targetYear) setGmStatsYear(String(usedYear));
         setGmStatsData(statsObj);
         if (!gmStatsEmpire || !statsObj[gmStatsEmpire]) {
           setGmStatsEmpire(empires[0]);
