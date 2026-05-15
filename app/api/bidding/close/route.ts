@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { dbGet, dbSet } from '@/lib/db';
 import { extractGMToken } from '@/lib/auth';
 import { getGameId, gk } from '@/lib/game';
-import { Bid, BidState, GameState, Player, TerritoryMap } from '@/lib/types';
+import { Bid, BidState, ChatMessage, GameState, Player, TerritoryMap } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -98,6 +98,60 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
+}
+
+// ── GET — diagnostic: compare bids vs current map ────────────────────────────
+export async function GET(req: NextRequest) {
+  if (!extractGMToken(req)) return NextResponse.json({ error: 'GM auth required' }, { status: 401 });
+
+  const gameId = getGameId(req);
+  const k = gk(gameId);
+
+  const [rawBids, feed, map, players] = await Promise.all([
+    dbGet<Record<string, unknown>>(k('bidding:bids')) ?? Promise.resolve({}),
+    dbGet<ChatMessage[]>(k('bidding:feed')) ?? Promise.resolve([]),
+    dbGet<TerritoryMap>(k('map:territories')) ?? Promise.resolve({} as TerritoryMap),
+    dbGet<Player[]>(k('game:players')) ?? Promise.resolve([] as Player[]),
+  ]);
+
+  // Normalize bids
+  const bids: BidState = {};
+  for (const [country, value] of Object.entries(rawBids ?? {})) {
+    if (Array.isArray(value)) bids[country] = value as Bid[];
+    else if (value && typeof value === 'object') bids[country] = [value as Bid];
+  }
+
+  // Build summary: for each bid, was it assigned in the map?
+  const bidSummary = Object.entries(bids).map(([country, bidders]) => {
+    const assignedIn = Object.keys(map ?? {}).filter(k =>
+      k === country || k.startsWith(`${country} (`)
+    );
+    return {
+      country,
+      winner: bidders[0]?.empireName ?? '?',
+      winnerPlayer: bidders[0]?.playerName ?? '?',
+      amount: bidders[0]?.amount ?? 0,
+      tied: bidders.length > 1,
+      tiedWith: bidders.length > 1 ? bidders.map(b => b.empireName) : [],
+      assignedIn,
+      missing: assignedIn.length === 0,
+    };
+  });
+
+  // Find empires with no territories at all
+  const empiresWithTerritories = new Set(Object.values(map ?? {}).map(t => t.empire));
+  const empiresWithoutTerritories = (players ?? [])
+    .filter(p => p.status === 'active' && !empiresWithTerritories.has(p.empire))
+    .map(p => p.empire);
+
+  return NextResponse.json({
+    bidsFound: Object.keys(bids).length,
+    feedMessages: (feed ?? []).length,
+    missing: bidSummary.filter(b => b.missing),
+    assigned: bidSummary.filter(b => !b.missing),
+    empiresWithoutTerritories,
+    recentFeed: (feed ?? []).slice(-20).map(m => m.text),
+  });
 }
 
 // PUT: open bidding with a timer (legacy support)
