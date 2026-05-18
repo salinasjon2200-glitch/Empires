@@ -274,9 +274,27 @@ export default function GMPage() {
     if (stateR.ok) {
       const currentYear = (await fetch('/api/game/state').then(r => r.json()).catch(() => ({ currentYear: 2032 }))).currentYear ?? 2032;
       const pkR = await fetch(`/api/turns/${currentYear - 1}/perfect-knowledge`, { headers: headers() });
-      if (pkR.ok) { const d = await pkR.json(); setPrevPK(d.perfectKnowledge ?? ''); }
+      let hasPK = false;
+      if (pkR.ok) { const d = await pkR.json(); const pk = d.perfectKnowledge ?? ''; setPrevPK(pk); hasPK = pk.length > 0; }
       const newsR = await fetch(`/api/turns/${currentYear - 1}/summary`);
-      if (newsR.ok) { const d = await newsR.json(); setWorldNews(d.publicSummary ?? ''); setWorldNewsYear(currentYear - 1); }
+      let hasNews = false;
+      if (newsR.ok) { const d = await newsR.json(); const news = d.publicSummary ?? ''; setWorldNews(news); setWorldNewsYear(currentYear - 1); hasNews = news.length > 0; }
+
+      // Restore phase completion state from Redis so a page refresh doesn't lock the UI.
+      // Phase 1 done = PK exists for last year. Phase 2 done = public summary also exists.
+      // Phase 3: check if the first active player already has an advisor report.
+      setPhase1Done(hasPK);
+      setPhase2Done(hasPK && hasNews);
+      if (hasPK && hasNews) {
+        const playersList = (await fetch('/api/game/setup', { headers: headers() }).then(r => r.json()).catch(() => ({ players: [] }))).players ?? [];
+        const firstActive = (playersList as { status: string; name: string }[]).find(p => p.status === 'active');
+        if (firstActive) {
+          const advR = await fetch(`/api/turns/${currentYear - 1}/advisors/${encodeURIComponent(firstActive.name)}`, { headers: headers() });
+          setPhase3Done(advR.ok);
+        }
+      } else {
+        setPhase3Done(false);
+      }
     }
   }, [authed, headers]);
 

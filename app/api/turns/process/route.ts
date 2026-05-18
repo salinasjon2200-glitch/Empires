@@ -595,27 +595,27 @@ Rules:
           // Save PK only — publicSummary added by the 'news' phase
           await dbSet(k(`turn:${year}:summary`), { perfectKnowledge, publicSummary: '' });
 
+          // Advance year + deduct war chest atomically with PK save, before sending done.
+          // This ensures the year advances even if Vercel cuts the stream immediately after.
+          const turnCost = Math.round(activePlayers.length * 0.25 * 100) / 100;
+          const completedAt = Date.now();
+          const chest = await dbGet<WarChest>(k('war:chest'));
+          if (chest) {
+            chest.balance = Math.max(0, Math.round((chest.balance - turnCost) * 100) / 100);
+            chest.lastTurnCost = turnCost;
+            chest.lastUpdated = completedAt;
+            await dbSet(k('war:chest'), chest);
+          }
+          await dbSet(k('game:state'), { ...state, processingComplete: false, currentYear: year + 1, lastTurnCompletedAt: completedAt });
+          await dbSet(k(`turn:${year}:processing`), { step: 'pk-done', completedAt });
+
           send({ type: 'step_done', step: 1, message: '✓ Perfect Knowledge complete.' });
+          send({ type: 'done', success: true, year, nextYear: year + 1, actualCost: turnCost, phase: 'pk' });
         } catch (e) {
           send({ type: 'error', message: `PK generation failed: ${e}` });
           controller.close();
           return;
         }
-
-        // Advance year + deduct war chest immediately after PK
-        const turnCost = Math.round(activePlayers.length * 0.25 * 100) / 100;
-        const completedAt = Date.now();
-        const chest = await dbGet<WarChest>(k('war:chest'));
-        if (chest) {
-          chest.balance = Math.max(0, Math.round((chest.balance - turnCost) * 100) / 100);
-          chest.lastTurnCost = turnCost;
-          chest.lastUpdated = completedAt;
-          await dbSet(k('war:chest'), chest);
-        }
-        await dbSet(k('game:state'), { ...state, processingComplete: false, currentYear: year + 1, lastTurnCompletedAt: completedAt });
-        await dbSet(k(`turn:${year}:processing`), { step: 'pk-done', completedAt });
-
-        send({ type: 'done', success: true, year, nextYear: year + 1, actualCost: turnCost, phase: 'pk' });
       } catch (e) {
         console.error('Processing error:', e);
         send({ type: 'error', message: String(e) });
