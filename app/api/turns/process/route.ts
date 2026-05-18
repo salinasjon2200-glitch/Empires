@@ -513,7 +513,8 @@ Rules:
 
         // ── PHASE: PK (default) ────────────────────────────────────────────────
         // Generates the Perfect Knowledge document + territory JSON.
-        // Advances the year and deducts war chest. News and advisors follow in separate phases.
+        // Year advance and war chest deduction happen BEFORE the stream starts so
+        // they are committed even if Vercel times out mid-generation.
         const year = state?.currentYear ?? 2032;
         const actions = await dbGet<Record<string, string>>(k(`turn:${year}:actions`)) ?? {};
         const map = await dbGet<TerritoryMap>(k('map:territories')) ?? {};
@@ -525,6 +526,20 @@ Rules:
           .join('\n\n');
         const territoryContext = buildTerritoryContext(map);
         const effectivePKSystem = contentMode === 'school' ? PK_SYSTEM + SCHOOL_MODIFIER : PK_SYSTEM;
+
+        // ── Commit year advance + war chest BEFORE the long stream ────────────
+        // This guarantees the year increments even if generation times out.
+        // If PK generation fails the GM can re-run "Regenerate PK" for year `year`.
+        const turnCost = Math.round(activePlayers.length * 0.25 * 100) / 100;
+        const completedAt = Date.now();
+        const chest = await dbGet<WarChest>(k('war:chest'));
+        if (chest) {
+          chest.balance = Math.max(0, Math.round((chest.balance - turnCost) * 100) / 100);
+          chest.lastTurnCost = turnCost;
+          chest.lastUpdated = completedAt;
+          await dbSet(k('war:chest'), chest);
+        }
+        await dbSet(k('game:state'), { ...state, processingComplete: false, currentYear: year + 1, lastTurnCompletedAt: completedAt });
 
         send({ type: 'progress', step: 1, message: `Generating Perfect Knowledge document for Year ${year}...` });
         await dbSet(k(`turn:${year}:processing`), { step: 1, startedAt: Date.now() });
@@ -592,27 +607,15 @@ Rules:
             await dbSet(k('game:players'), updatedPlayers);
           }
 
-          // Save PK only — publicSummary added by the 'news' phase
+          // Save PK — publicSummary added by the 'news' phase
           await dbSet(k(`turn:${year}:summary`), { perfectKnowledge, publicSummary: '' });
-
-          // Advance year + deduct war chest atomically with PK save, before sending done.
-          // This ensures the year advances even if Vercel cuts the stream immediately after.
-          const turnCost = Math.round(activePlayers.length * 0.25 * 100) / 100;
-          const completedAt = Date.now();
-          const chest = await dbGet<WarChest>(k('war:chest'));
-          if (chest) {
-            chest.balance = Math.max(0, Math.round((chest.balance - turnCost) * 100) / 100);
-            chest.lastTurnCost = turnCost;
-            chest.lastUpdated = completedAt;
-            await dbSet(k('war:chest'), chest);
-          }
-          await dbSet(k('game:state'), { ...state, processingComplete: false, currentYear: year + 1, lastTurnCompletedAt: completedAt });
           await dbSet(k(`turn:${year}:processing`), { step: 'pk-done', completedAt });
 
           send({ type: 'step_done', step: 1, message: '✓ Perfect Knowledge complete.' });
           send({ type: 'done', success: true, year, nextYear: year + 1, actualCost: turnCost, phase: 'pk' });
         } catch (e) {
-          send({ type: 'error', message: `PK generation failed: ${e}` });
+          // Year already advanced above. GM can use "Regenerate PK" to retry generation.
+          send({ type: 'error', message: `PK generation timed out or failed — year has advanced to ${year + 1}. Use "Regenerate Perfect Knowledge (Year ${year})" to retry. Error: ${e}` });
           controller.close();
           return;
         }
