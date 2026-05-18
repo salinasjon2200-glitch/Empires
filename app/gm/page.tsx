@@ -298,7 +298,7 @@ export default function GMPage() {
       const hasPK = pkResult.found;
 
       const pkYear = pkResult.yr; // the year the PK actually lives under
-      let newsResult = await fetchNews(pkYear);
+      const newsResult = await fetchNews(pkYear);
       setWorldNews(newsResult.news);
       setWorldNewsYear(pkYear);
       const hasNews = newsResult.found;
