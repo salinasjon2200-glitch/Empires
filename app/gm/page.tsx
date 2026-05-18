@@ -270,38 +270,30 @@ export default function GMPage() {
       setBiddingPoints(d.points ?? {});
     }
 
-    // Load PK and world news. After Phase 1, the year advances before done fires, so
-    // currentYear points at the NEW year while the PK is saved under the OLD year.
-    // Try currentYear first (covers pk-regen without advance), fall back to currentYear-1
-    // (covers normal Phase 1 completion).
+    // Phase 1 always saves PK to turn:(currentYear-1) because it advances the year
+    // before streaming. Only check currentYear-1; never fall back to currentYear
+    // (which may hold stale or garbage data from previous bad runs).
     if (stateR.ok) {
       const currentYear = (await fetch('/api/game/state').then(r => r.json()).catch(() => ({ currentYear: 2032 }))).currentYear ?? 2032;
+      const pkYear = currentYear - 1;
+      const MIN_LEN = 200; // real documents are always longer than this
 
-      // Helper: fetch PK for a given year, return { pk, found }
-      const fetchPK = async (yr: number) => {
-        const r = await fetch(`/api/turns/${yr}/perfect-knowledge`, { headers: headers() });
-        if (!r.ok) return { pk: '', found: false, yr };
-        const d = await r.json();
-        return { pk: d.perfectKnowledge ?? '', found: (d.perfectKnowledge ?? '').length > 0, yr };
-      };
-      const fetchNews = async (yr: number) => {
-        const r = await fetch(`/api/turns/${yr}/summary`);
-        if (!r.ok) return { news: '', found: false, yr };
-        const d = await r.json();
-        return { news: d.publicSummary ?? '', found: (d.publicSummary ?? '').length > 0, yr };
-      };
+      const pkR2 = await fetch(`/api/turns/${pkYear}/perfect-knowledge`, { headers: headers() });
+      let hasPK = false;
+      if (pkR2.ok) {
+        const d = await pkR2.json();
+        const pk = d.perfectKnowledge ?? '';
+        if (pk.length >= MIN_LEN) { setPrevPK(pk); hasPK = true; } else { setPrevPK(''); }
+      } else { setPrevPK(''); }
 
-      // Try currentYear, then fall back to currentYear-1
-      let pkResult = await fetchPK(currentYear);
-      if (!pkResult.found) pkResult = await fetchPK(currentYear - 1);
-      setPrevPK(pkResult.pk);
-      const hasPK = pkResult.found;
-
-      const pkYear = pkResult.yr; // the year the PK actually lives under
-      const newsResult = await fetchNews(pkYear);
-      setWorldNews(newsResult.news);
-      setWorldNewsYear(pkYear);
-      const hasNews = newsResult.found;
+      const newsR2 = await fetch(`/api/turns/${pkYear}/summary`);
+      let hasNews = false;
+      if (newsR2.ok) {
+        const d = await newsR2.json();
+        const news = d.publicSummary ?? '';
+        if (news.length >= MIN_LEN) { setWorldNews(news); setWorldNewsYear(pkYear); hasNews = true; }
+        else { setWorldNews(''); setWorldNewsYear(pkYear); }
+      } else { setWorldNews(''); }
 
       // Restore phase completion state
       setPhase1Done(hasPK);
