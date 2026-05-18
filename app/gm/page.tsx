@@ -1910,19 +1910,33 @@ export default function GMPage() {
                 <p className="text-xs" style={{ color: 'var(--text2)' }}>
                   No cooldown. Operates on the most recently processed year ({year - 1}). Does not advance year or deduct war chest.
                 </p>
-                {/* Emergency year advance — for when PK completed but year counter got stuck */}
-                <button
-                  className="btn-ghost w-full py-2 text-sm"
-                  style={{ borderColor: 'var(--warning)', color: 'var(--warning)' }}
-                  disabled={processing}
-                  onClick={async () => {
-                    if (!confirm(`Manually advance year from ${year} → ${year + 1}? Only use this if Phase 1 ran but the year counter got stuck.`)) return;
-                    const res = await fetch('/api/game/state', { method: 'POST', headers: headers(), body: JSON.stringify({ currentYear: year + 1 }) });
-                    if (res.ok) { await loadAll(); } else { alert('Failed to advance year.'); }
-                  }}
-                >
-                  ⚠️ Emergency: Advance Year {year} → {year + 1}
-                </button>
+                {/* Emergency year controls — for when the year counter gets stuck or overshoots */}
+                <div className="flex gap-2">
+                  <button
+                    className="btn-ghost flex-1 py-2 text-sm"
+                    style={{ borderColor: 'var(--warning)', color: 'var(--warning)' }}
+                    disabled={processing}
+                    onClick={async () => {
+                      if (!confirm(`Manually advance year from ${year} → ${year + 1}? Only use this if Phase 1 ran but the year counter got stuck.`)) return;
+                      const res = await fetch('/api/game/state', { method: 'POST', headers: headers(), body: JSON.stringify({ currentYear: year + 1 }) });
+                      if (res.ok) { await loadAll(); } else { alert('Failed to advance year.'); }
+                    }}
+                  >
+                    ⚠️ Year {year} → {year + 1}
+                  </button>
+                  <button
+                    className="btn-ghost flex-1 py-2 text-sm"
+                    style={{ borderColor: 'var(--danger)', color: 'var(--danger)' }}
+                    disabled={processing}
+                    onClick={async () => {
+                      if (!confirm(`Roll back year from ${year} → ${year - 1}? Only use this if the year advanced incorrectly.`)) return;
+                      const res = await fetch('/api/game/state', { method: 'POST', headers: headers(), body: JSON.stringify({ currentYear: year - 1 }) });
+                      if (res.ok) { await loadAll(); } else { alert('Failed to roll back year.'); }
+                    }}
+                  >
+                    ⚠️ Year {year} → {year - 1}
+                  </button>
+                </div>
                 <div className="space-y-2">
                   {/* Regen PK */}
                   <button
