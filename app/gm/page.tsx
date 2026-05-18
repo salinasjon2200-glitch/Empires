@@ -270,26 +270,47 @@ export default function GMPage() {
       setBiddingPoints(d.points ?? {});
     }
 
-    // Load prev PK and world news using the year extracted above (stateR body already consumed — cannot clone)
+    // Load PK and world news. After Phase 1, the year advances before done fires, so
+    // currentYear points at the NEW year while the PK is saved under the OLD year.
+    // Try currentYear first (covers pk-regen without advance), fall back to currentYear-1
+    // (covers normal Phase 1 completion).
     if (stateR.ok) {
       const currentYear = (await fetch('/api/game/state').then(r => r.json()).catch(() => ({ currentYear: 2032 }))).currentYear ?? 2032;
-      const pkR = await fetch(`/api/turns/${currentYear}/perfect-knowledge`, { headers: headers() });
-      let hasPK = false;
-      if (pkR.ok) { const d = await pkR.json(); const pk = d.perfectKnowledge ?? ''; setPrevPK(pk); hasPK = pk.length > 0; }
-      const newsR = await fetch(`/api/turns/${currentYear}/summary`);
-      let hasNews = false;
-      if (newsR.ok) { const d = await newsR.json(); const news = d.publicSummary ?? ''; setWorldNews(news); setWorldNewsYear(currentYear); hasNews = news.length > 0; }
 
-      // Restore phase completion state from Redis so a page refresh doesn't lock the UI.
-      // Phase 1 done = PK exists for last year. Phase 2 done = public summary also exists.
-      // Phase 3: check if the first active player already has an advisor report.
+      // Helper: fetch PK for a given year, return { pk, found }
+      const fetchPK = async (yr: number) => {
+        const r = await fetch(`/api/turns/${yr}/perfect-knowledge`, { headers: headers() });
+        if (!r.ok) return { pk: '', found: false, yr };
+        const d = await r.json();
+        return { pk: d.perfectKnowledge ?? '', found: (d.perfectKnowledge ?? '').length > 0, yr };
+      };
+      const fetchNews = async (yr: number) => {
+        const r = await fetch(`/api/turns/${yr}/summary`);
+        if (!r.ok) return { news: '', found: false, yr };
+        const d = await r.json();
+        return { news: d.publicSummary ?? '', found: (d.publicSummary ?? '').length > 0, yr };
+      };
+
+      // Try currentYear, then fall back to currentYear-1
+      let pkResult = await fetchPK(currentYear);
+      if (!pkResult.found) pkResult = await fetchPK(currentYear - 1);
+      setPrevPK(pkResult.pk);
+      const hasPK = pkResult.found;
+
+      const pkYear = pkResult.yr; // the year the PK actually lives under
+      let newsResult = await fetchNews(pkYear);
+      setWorldNews(newsResult.news);
+      setWorldNewsYear(pkYear);
+      const hasNews = newsResult.found;
+
+      // Restore phase completion state
       setPhase1Done(hasPK);
       setPhase2Done(hasPK && hasNews);
       if (hasPK && hasNews) {
         const playersList = (await fetch('/api/game/setup', { headers: headers() }).then(r => r.json()).catch(() => ({ players: [] }))).players ?? [];
         const firstActive = (playersList as { status: string; name: string }[]).find(p => p.status === 'active');
         if (firstActive) {
-          const advR = await fetch(`/api/turns/${currentYear - 1}/advisors/${encodeURIComponent(firstActive.name)}`, { headers: headers() });
+          const advR = await fetch(`/api/turns/${pkYear}/advisors/${encodeURIComponent(firstActive.name)}`, { headers: headers() });
           setPhase3Done(advR.ok);
         }
       } else {
@@ -2057,7 +2078,7 @@ export default function GMPage() {
 
             {!historyYear && prevPK && (
               <div className="card space-y-3">
-                <p className="label">Perfect Knowledge — Year {year - 1} (latest)</p>
+                <p className="label">Perfect Knowledge — Year {worldNewsYear ?? year - 1} (latest)</p>
                 <div className="text-sm font-mono leading-relaxed overflow-y-auto whitespace-pre-wrap" style={{ color: 'var(--text)', maxHeight: '70vh' }}>
                   {prevPK}
                 </div>
