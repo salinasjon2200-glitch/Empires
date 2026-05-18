@@ -273,12 +273,12 @@ export default function GMPage() {
     // Load prev PK and world news using the year extracted above (stateR body already consumed — cannot clone)
     if (stateR.ok) {
       const currentYear = (await fetch('/api/game/state').then(r => r.json()).catch(() => ({ currentYear: 2032 }))).currentYear ?? 2032;
-      const pkR = await fetch(`/api/turns/${currentYear - 1}/perfect-knowledge`, { headers: headers() });
+      const pkR = await fetch(`/api/turns/${currentYear}/perfect-knowledge`, { headers: headers() });
       let hasPK = false;
       if (pkR.ok) { const d = await pkR.json(); const pk = d.perfectKnowledge ?? ''; setPrevPK(pk); hasPK = pk.length > 0; }
-      const newsR = await fetch(`/api/turns/${currentYear - 1}/summary`);
+      const newsR = await fetch(`/api/turns/${currentYear}/summary`);
       let hasNews = false;
-      if (newsR.ok) { const d = await newsR.json(); const news = d.publicSummary ?? ''; setWorldNews(news); setWorldNewsYear(currentYear - 1); hasNews = news.length > 0; }
+      if (newsR.ok) { const d = await newsR.json(); const news = d.publicSummary ?? ''; setWorldNews(news); setWorldNewsYear(currentYear); hasNews = news.length > 0; }
 
       // Restore phase completion state from Redis so a page refresh doesn't lock the UI.
       // Phase 1 done = PK exists for last year. Phase 2 done = public summary also exists.
@@ -1791,9 +1791,9 @@ export default function GMPage() {
                     <button className="btn-ghost text-xs flex-shrink-0" style={{ fontSize: '0.65rem', padding: '0.25rem 0.6rem' }}
                       title="Use if Phase 1 completed but connection dropped"
                       onClick={async () => {
-                        const r = await fetch(`/api/turns/${year - 1}/perfect-knowledge`, { headers: headers() });
+                        const r = await fetch(`/api/turns/${year}/perfect-knowledge`, { headers: headers() });
                         if (r.ok) { setPhase1Done(true); setProcessLog(l => [...l, '⚡ Phase 2 unlocked — PK confirmed in database.']); }
-                        else setProcessLog(l => [...l, `✗ No PK found for Year ${year - 1}. Run Phase 1 first.`]);
+                        else setProcessLog(l => [...l, `✗ No PK found for Year ${year}. Run Phase 1 first.`]);
                       }}>Force unlock</button>
                   )}
                 </div>
@@ -1825,9 +1825,9 @@ export default function GMPage() {
                     <button className="btn-ghost text-xs flex-shrink-0" style={{ fontSize: '0.65rem', padding: '0.25rem 0.6rem' }}
                       title="Use if Phase 2 completed but connection dropped"
                       onClick={async () => {
-                        const r = await fetch(`/api/turns/${year - 1}/summary`);
+                        const r = await fetch(`/api/turns/${year}/summary`);
                         if (r.ok) { const d = await r.json(); if (d.publicSummary) { setPhase2Done(true); setProcessLog(l => [...l, '⚡ Phase 3 unlocked — World News confirmed in database.']); return; } }
-                        setProcessLog(l => [...l, `✗ No World News found for Year ${year - 1}. Run Phase 2 first.`]);
+                        setProcessLog(l => [...l, `✗ No World News found for Year ${year}. Run Phase 2 first.`]);
                       }}>Force unlock</button>
                   )}
                 </div>
@@ -1908,7 +1908,7 @@ export default function GMPage() {
                   REGENERATION TOOLS
                 </p>
                 <p className="text-xs" style={{ color: 'var(--text2)' }}>
-                  No cooldown. Operates on the most recently processed year ({year - 1}). Does not advance year or deduct war chest.
+                  No cooldown. Operates on the current year ({year}). Does not advance year or deduct war chest.
                 </p>
                 {/* Emergency year controls — for when the year counter gets stuck or overshoots */}
                 <div className="flex gap-2">
@@ -1946,7 +1946,7 @@ export default function GMPage() {
                   >
                     {processing && processPhase === 'pk-regen'
                       ? 'Regenerating PK… do not close'
-                      : `🔁 Regenerate Perfect Knowledge (Year ${year - 1})`}
+                      : `🔁 Regenerate Perfect Knowledge (Year ${year})`}
                   </button>
                   {/* Regen News */}
                   <button
@@ -1956,7 +1956,7 @@ export default function GMPage() {
                   >
                     {processing && processPhase === 'news'
                       ? 'Regenerating News… do not close'
-                      : `📰 Regenerate World News Report (Year ${year - 1})`}
+                      : `📰 Regenerate World News Report (Year ${year})`}
                   </button>
                   {/* Map Generator */}
                   <button
@@ -1966,7 +1966,7 @@ export default function GMPage() {
                   >
                     {processing && processPhase === 'map-gen'
                       ? 'Generating map… do not close'
-                      : `🗺️ Map Generator — extract territories from PK (Year ${year - 1})`}
+                      : `🗺️ Map Generator — extract territories from PK (Year ${year})`}
                   </button>
                   {/* Regen All Advisors */}
                   <button
@@ -1976,7 +1976,7 @@ export default function GMPage() {
                   >
                     {processing && processPhase === 'advisors'
                       ? 'Generating advisors… do not close'
-                      : `📋 Regenerate All Advisor Reports (Year ${year - 1})`}
+                      : `📋 Regenerate All Advisor Reports (Year ${year})`}
                   </button>
                   <button
                     className="btn-ghost w-full py-2 text-sm"
