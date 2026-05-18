@@ -106,7 +106,7 @@ function getEmpireTerritories(map: TerritoryMap, empire: string): string[] {
 
 async function generateStatsForEmpire(
   player: Player,
-  pk: string,
+  pkHistory: { year: number; pk: string }[],
   prevStats: EmpireStats | null,
   territories: string[],
   year: number,
@@ -117,14 +117,16 @@ async function generateStatsForEmpire(
 CONTROLLED TERRITORIES: ${territories.length > 0 ? territories.join(', ') : 'None'}`;
 
   const prevCtx = prevStats
-    ? `PREVIOUS YEAR STATISTICS (Year ${prevStats.generatedYear}):\n${JSON.stringify(prevStats, null, 2)}`
-    : 'PREVIOUS YEAR STATISTICS: None (this is the initial generation)';
+    ? `MOST RECENT STATISTICS SNAPSHOT (Year ${prevStats.generatedYear}):\n${JSON.stringify(prevStats, null, 2)}`
+    : 'MOST RECENT STATISTICS SNAPSHOT: None (first generation for this empire)';
 
-  const pkSection = pk
-    ? `PERFECT KNOWLEDGE DOCUMENT (what actually happened this year):\n${pk}`
-    : `PERFECT KNOWLEDGE DOCUMENT: None — this is a starting-position generation based purely on controlled territories. Generate realistic baseline stats for an empire holding these territories at the game start.`;
+  const pkSection = pkHistory.length > 0
+    ? `COMPLETE GAME HISTORY — Perfect Knowledge documents for every turn played so far (use ALL of these to understand the full arc of what has happened to this empire):\n\n${
+        pkHistory.map(({ year: y, pk }) => `=== Year ${y} ===\n${pk}`).join('\n\n')
+      }`
+    : `GAME HISTORY: None — generate baseline stats from controlled territories and real-world data for Year ${year}.`;
 
-  const userContent = `GAME YEAR: ${year} (the in-game calendar year is ${year}; all stats must reflect the state of this empire as of the year ${year})
+  const userContent = `GAME YEAR: ${year} (the in-game calendar year is ${year}; all stats must reflect the state of this empire as of the end of Year ${year})
 
 ${empireCtx}
 
@@ -132,7 +134,7 @@ ${prevCtx}
 
 ${pkSection}
 
-Generate the empire statistics JSON for Year ${year}. The year is ${year} — make sure all figures, technology levels, and narrative references are appropriate for ${year}, not any earlier year.`;
+Generate the empire statistics JSON for Year ${year}. The year is ${year} — make sure all figures, technology levels, and narrative references are appropriate for ${year}, not any earlier year. Use the FULL game history above to ensure continuity: every war, treaty, economic event, and territorial change across all turns should be reflected in the final numbers.`;
 
   try {
     let rawJson = '';
@@ -269,9 +271,8 @@ export async function POST(req: NextRequest, { params }: { params: { year: strin
   const skipExisting: boolean = body.skipExisting ?? false;
   const forceInitial: boolean = body.forceInitial ?? false; // force web-search mode
 
-  const [players, summary, map, archive] = await Promise.all([
+  const [players, map, archive] = await Promise.all([
     dbGet<Player[]>(k('game:players')) ?? Promise.resolve([] as Player[]),
-    dbGet<{ perfectKnowledge?: string }>(k(`turn:${year}:summary`)),
     dbGet<TerritoryMap>(k('map:territories')) ?? Promise.resolve({} as TerritoryMap),
     dbGet<number[]>(k('turn:archive')) ?? Promise.resolve([] as number[]),
   ]);
@@ -279,9 +280,16 @@ export async function POST(req: NextRequest, { params }: { params: { year: strin
   const playerList = (players ?? []) as Player[];
   const mapData = (map ?? {}) as TerritoryMap;
   const archiveList = (archive ?? []) as number[];
-  // PK is optional — if absent (e.g. post-bidding before any turn is processed),
-  // stats are generated purely from territory data and real-world baselines.
-  const pk = summary?.perfectKnowledge ?? '';
+
+  // Load PK documents for every turn up to and including the current year, in order.
+  // This gives the AI the full narrative history of the game, not just the latest turn.
+  const allTurnYears = Array.from(new Set([...archiveList, year])).sort((a, b) => a - b).filter(y => y <= year);
+  const allSummaries = await Promise.all(
+    allTurnYears.map(y => dbGet<{ perfectKnowledge?: string }>(k(`turn:${y}:summary`)))
+  );
+  const pkHistory = allTurnYears
+    .map((y, i) => ({ year: y, pk: allSummaries[i]?.perfectKnowledge ?? '' }))
+    .filter(entry => entry.pk.trim() !== '');
 
   const activePlayers = playerList.filter(p => p.status === 'active');
 
@@ -317,7 +325,7 @@ export async function POST(req: NextRequest, { params }: { params: { year: strin
           send({ type: 'empire_start', empire: player.empire, isInitial });
 
           const stats = await generateStatsForEmpire(
-            player, pk, prevStats, territories, year, isInitial, send
+            player, pkHistory, prevStats, territories, year, isInitial, send
           );
 
           if (stats) {
