@@ -201,7 +201,7 @@ export async function POST(req: NextRequest) {
         // ── PHASE: NEWS ───────────────────────────────────────────────────────
         // Runs after 'pk' has advanced the year. Reads PK from Redis, writes publicSummary.
         if (phase === 'news') {
-          const year = state?.currentYear ?? 2033;
+          const year = (state?.currentYear ?? 2033) - 1;
           const saved = await dbGet<{ perfectKnowledge: string }>(k(`turn:${year}:summary`));
           if (!saved?.perfectKnowledge) {
             send({ type: 'error', message: `No Perfect Knowledge found for Year ${year}. Run Phase 1 first.` });
@@ -261,7 +261,7 @@ export async function POST(req: NextRequest) {
         // ── PHASE: ADVISORS ────────────────────────────────────────────────────
         // Runs after 'news'. Reads PK only from Redis — advisors are PK-only, not news-dependent.
         if (phase === 'advisors') {
-          const year = state?.currentYear ?? 2033;
+          const year = (state?.currentYear ?? 2033) - 1;
           const map = await dbGet<TerritoryMap>(k('map:territories')) ?? {};
           const activePlayers = players.filter(p => p.status === 'active');
           const playerCount = activePlayers.length;
@@ -358,7 +358,7 @@ export async function POST(req: NextRequest) {
         // ── PHASE: PK-REGEN ───────────────────────────────────────────────────
         // Re-generates the PK for the already-processed year WITHOUT advancing year or deducting war chest.
         if (phase === 'pk-regen') {
-          const year = state?.currentYear ?? 2033;
+          const year = (state?.currentYear ?? 2033) - 1;
           const regenActions = await dbGet<Record<string, string>>(k(`turn:${year}:actions`)) ?? {};
           const regenMap = await dbGet<TerritoryMap>(k('map:territories')) ?? {};
           const activePlayers = players.filter(p => p.status === 'active');
@@ -433,7 +433,7 @@ export async function POST(req: NextRequest) {
         // ── PHASE: MAP-GEN ────────────────────────────────────────────────────
         // Uses PK from Redis + Sonnet to extract and apply territory ownership.
         if (phase === 'map-gen') {
-          const year = state?.currentYear ?? 2033;
+          const year = (state?.currentYear ?? 2033) - 1;
           const saved = await dbGet<{ perfectKnowledge: string }>(k(`turn:${year}:summary`));
           if (!saved?.perfectKnowledge) {
             send({ type: 'error', message: `No Perfect Knowledge found for Year ${year}. Run Phase 1 first.` });

@@ -1812,9 +1812,9 @@ export default function GMPage() {
                     <button className="btn-ghost text-xs flex-shrink-0" style={{ fontSize: '0.65rem', padding: '0.25rem 0.6rem' }}
                       title="Use if Phase 1 completed but connection dropped"
                       onClick={async () => {
-                        const r = await fetch(`/api/turns/${year}/perfect-knowledge`, { headers: headers() });
+                        const r = await fetch(`/api/turns/${year - 1}/perfect-knowledge`, { headers: headers() });
                         if (r.ok) { setPhase1Done(true); setProcessLog(l => [...l, '⚡ Phase 2 unlocked — PK confirmed in database.']); }
-                        else setProcessLog(l => [...l, `✗ No PK found for Year ${year}. Run Phase 1 first.`]);
+                        else setProcessLog(l => [...l, `✗ No PK found for Year ${year - 1}. Run Phase 1 first.`]);
                       }}>Force unlock</button>
                   )}
                 </div>
@@ -1846,9 +1846,9 @@ export default function GMPage() {
                     <button className="btn-ghost text-xs flex-shrink-0" style={{ fontSize: '0.65rem', padding: '0.25rem 0.6rem' }}
                       title="Use if Phase 2 completed but connection dropped"
                       onClick={async () => {
-                        const r = await fetch(`/api/turns/${year}/summary`);
+                        const r = await fetch(`/api/turns/${year - 1}/summary`);
                         if (r.ok) { const d = await r.json(); if (d.publicSummary) { setPhase2Done(true); setProcessLog(l => [...l, '⚡ Phase 3 unlocked — World News confirmed in database.']); return; } }
-                        setProcessLog(l => [...l, `✗ No World News found for Year ${year}. Run Phase 2 first.`]);
+                        setProcessLog(l => [...l, `✗ No World News found for Year ${year - 1}. Run Phase 2 first.`]);
                       }}>Force unlock</button>
                   )}
                 </div>
@@ -1929,7 +1929,7 @@ export default function GMPage() {
                   REGENERATION TOOLS
                 </p>
                 <p className="text-xs" style={{ color: 'var(--text2)' }}>
-                  No cooldown. Operates on the current year ({year}). Does not advance year or deduct war chest.
+                  No cooldown. Operates on the last processed year ({year - 1}). Does not advance year or deduct war chest.
                 </p>
                 {/* Emergency year controls — for when the year counter gets stuck or overshoots */}
                 <div className="flex gap-2">
@@ -1967,7 +1967,7 @@ export default function GMPage() {
                   >
                     {processing && processPhase === 'pk-regen'
                       ? 'Regenerating PK… do not close'
-                      : `🔁 Regenerate Perfect Knowledge (Year ${year})`}
+                      : `🔁 Regenerate Perfect Knowledge (Year ${year - 1})`}
                   </button>
                   {/* Regen News */}
                   <button
@@ -1977,7 +1977,7 @@ export default function GMPage() {
                   >
                     {processing && processPhase === 'news'
                       ? 'Regenerating News… do not close'
-                      : `📰 Regenerate World News Report (Year ${year})`}
+                      : `📰 Regenerate World News Report (Year ${year - 1})`}
                   </button>
                   {/* Map Generator */}
                   <button
@@ -1987,7 +1987,7 @@ export default function GMPage() {
                   >
                     {processing && processPhase === 'map-gen'
                       ? 'Generating map… do not close'
-                      : `🗺️ Map Generator — extract territories from PK (Year ${year})`}
+                      : `🗺️ Map Generator — extract territories from PK (Year ${year - 1})`}
                   </button>
                   {/* Regen All Advisors */}
                   <button
@@ -1997,7 +1997,7 @@ export default function GMPage() {
                   >
                     {processing && processPhase === 'advisors'
                       ? 'Generating advisors… do not close'
-                      : `📋 Regenerate All Advisor Reports (Year ${year})`}
+                      : `📋 Regenerate All Advisor Reports (Year ${year - 1})`}
                   </button>
                   <button
                     className="btn-ghost w-full py-2 text-sm"
