@@ -578,6 +578,10 @@ export default function GMPage() {
       setProcessError(`Stream read error: ${e}`);
     }
 
+    // Always sync UI from Redis when the stream ends — even on timeout or error.
+    // The server may have committed the year advance / PK save before the connection dropped.
+    await loadAll();
+
     phaseAbortRef.current = null;
     setProcessing(false);
     setStreamingText('');
