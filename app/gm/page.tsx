@@ -1768,13 +1768,13 @@ export default function GMPage() {
                 <button
                   className="btn-primary w-full py-2"
                   onClick={() => runPhase('pk')}
-                  disabled={processing || !cooldownReady || !warChestReady || phase1Done}
+                  disabled={processing || !cooldownReady || !warChestReady}
                 >
                   {processing && processPhase === 'pk'
                     ? 'Phase 1 running… do not close this page'
-                    : phase1Done ? '✓ Phase 1 complete'
                     : !warChestReady ? `War Chest insufficient ($${warChest?.balance.toFixed(2)} / $${warChest?.threshold.toFixed(2)})`
                     : !cooldownReady ? `Cooldown: ${cooldownHours}h ${cooldownMins}m remaining`
+                    : phase1Done ? `↺ Re-run Phase 1 — Turn ${year}`
                     : `Run Phase 1 — Turn ${year}`}
                 </button>
                 {processing && processPhase === 'pk' && (
@@ -1813,13 +1813,13 @@ export default function GMPage() {
                 <button
                   className="btn-primary w-full py-2"
                   onClick={() => runPhase('news')}
-                  disabled={processing || !phase1Done || phase2Done}
+                  disabled={processing || !phase1Done}
                 >
                   {processing && processPhase === 'news'
                     ? 'Phase 2 running… do not close this page'
-                    : phase2Done ? '✓ Phase 2 complete'
-                    : phase1Done ? 'Run Phase 2 — World News Report'
-                    : 'Complete Phase 1 first'}
+                    : !phase1Done ? 'Complete Phase 1 first'
+                    : phase2Done ? '↺ Re-run Phase 2 — World News Report'
+                    : 'Run Phase 2 — World News Report'}
                 </button>
               </div>
 
@@ -1851,8 +1851,9 @@ export default function GMPage() {
                 >
                   {processing && processPhase === 'advisors'
                     ? 'Phase 3 running… do not close this page'
-                    : phase2Done ? `Run Phase 3 — ${activePlayers.length} Advisor Reports`
-                    : 'Complete Phase 2 first'}
+                    : !phase2Done ? 'Complete Phase 2 first'
+                    : phase3Done ? `↺ Re-run Phase 3 — ${activePlayers.length} Advisor Reports`
+                    : `Run Phase 3 — ${activePlayers.length} Advisor Reports`}
                 </button>
               </div>
 
@@ -1882,8 +1883,8 @@ export default function GMPage() {
                 >
                   {processing && processPhase === 'stats'
                     ? 'Phase 4 running… do not close this page'
-                    : phase3Done ? `Run Phase 4 — ${activePlayers.length} Empire Stat Sheets`
-                    : 'Complete Phase 3 first (or Force unlock →)'}
+                    : !phase3Done ? 'Complete Phase 3 first (or Force unlock →)'
+                    : `↺ Run Phase 4 — ${activePlayers.length} Empire Stat Sheets`}
                 </button>
                 {statsLog.length > 0 && (
                   <div className="text-xs font-mono space-y-0.5 max-h-40 overflow-y-auto" style={{ color: 'var(--text2)' }}>
