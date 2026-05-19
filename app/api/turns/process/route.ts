@@ -120,13 +120,18 @@ General Rules:
  * If `clientOverride` is provided (non-empty), it replaces the most-recent
  * archived year's PK — allowing the GM to correct mistakes before processing.
  */
+// Max prior years to include in the PK history prompt.
+// Keeping this small prevents the input from ballooning and causing Vercel timeouts.
+const PK_HISTORY_LIMIT = 3;
+
 async function buildPKHistory(
   archive: number[],
   beforeYear: number,
   k: (key: string) => string,
   clientOverride?: string,
 ): Promise<string> {
-  const pastYears = archive.filter(y => y < beforeYear).sort((a, b) => a - b);
+  // Only include the most recent N years — full history blows the 5-min Vercel limit
+  const pastYears = archive.filter(y => y < beforeYear).sort((a, b) => a - b).slice(-PK_HISTORY_LIMIT);
   if (pastYears.length === 0) return '[No prior turns — this is the first year of the game.]';
 
   const mostRecentYear = pastYears[pastYears.length - 1];
@@ -379,7 +384,7 @@ export async function POST(req: NextRequest) {
           try {
             const pkStream = client.messages.stream({
               model: 'claude-opus-4-6',
-              max_tokens: 12000 + (playerCount * 800),
+              max_tokens: 8000 + (playerCount * 200),
               system: effectivePKSystem,
               messages: [{
                 role: 'user',
@@ -554,7 +559,7 @@ Rules:
         try {
           const pkStream = client.messages.stream({
             model: 'claude-opus-4-6',
-            max_tokens: 12000 + (playerCount * 800),
+            max_tokens: 8000 + (playerCount * 200),
             system: effectivePKSystem,
             messages: [{
               role: 'user',
