@@ -164,6 +164,9 @@ export default function GMPage() {
   const [statsEmpireChars, setStatsEmpireChars] = useState<Record<string, number>>({});
   const [statsEmpireText, setStatsEmpireText] = useState<Record<string, string>>({});
   const [statsLiveEmpire, setStatsLiveEmpire] = useState<string>('');
+  // Per-nation regen selection (empty = all)
+  const [statsSelectedEmpires, setStatsSelectedEmpires] = useState<string[]>([]);
+  const [statsGenYear, setStatsGenYear] = useState('');
 
   // GM stats viewer
   const [gmStatsYear, setGmStatsYear] = useState<string>('');
@@ -597,7 +600,7 @@ export default function GMPage() {
     setYearSaving(false);
   }
 
-  async function runStats(skipExisting = false, targetYear?: number) {
+  async function runStats(skipExisting = false, targetYear?: number, targetEmpires?: string[]) {
     setProcessing(true);
     setProcessPhase('stats');
     const statsYear = targetYear ?? year;
@@ -616,7 +619,11 @@ export default function GMPage() {
       r = await fetch(`/api/turns/${statsYear}/stats`, {
         method: 'POST',
         headers: headers(),
-        body: JSON.stringify({ skipExisting, forceInitial: statsForceInitial }),
+        body: JSON.stringify({
+          skipExisting,
+          forceInitial: statsForceInitial,
+          ...(targetEmpires && targetEmpires.length > 0 ? { empires: targetEmpires } : {}),
+        }),
         signal: abortController.signal,
       });
     } catch (e) {
@@ -3149,7 +3156,117 @@ export default function GMPage() {
         {/* EMPIRE STATS */}
         {tab === 'stats' && (
           <div className="space-y-4">
-            {/* Controls */}
+            {/* Generation Controls */}
+            <div className="card space-y-3">
+              <p className="label">Generate / Regenerate Stats</p>
+
+              {/* Year + options row */}
+              <div className="flex gap-4 flex-wrap items-center">
+                <div>
+                  <label className="label">Year</label>
+                  <input
+                    type="number"
+                    className="input text-sm"
+                    style={{ width: '8rem' }}
+                    placeholder={String(year - 1)}
+                    value={statsGenYear}
+                    onChange={e => setStatsGenYear(e.target.value)}
+                  />
+                </div>
+                <label className="flex items-center gap-2 cursor-pointer mt-4">
+                  <input
+                    type="checkbox"
+                    checked={statsForceInitial}
+                    onChange={e => setStatsForceInitial(e.target.checked)}
+                    style={{ width: 14, height: 14 }}
+                  />
+                  <span className="text-sm">Force initial baseline</span>
+                </label>
+              </div>
+
+              {/* Empire selector */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs" style={{ color: 'var(--text2)' }}>
+                    Select nations to regenerate — <span style={{ color: 'var(--accent)' }}>{statsSelectedEmpires.length === 0 ? 'all' : statsSelectedEmpires.length} selected</span>
+                  </p>
+                  <button
+                    className="text-xs px-2 py-0.5 rounded"
+                    style={{ background: 'var(--surface2)', color: 'var(--text2)' }}
+                    onClick={() => {
+                      const active = players.filter(p => p.status === 'active');
+                      setStatsSelectedEmpires(sel => sel.length === active.length ? [] : active.map(p => p.empire));
+                    }}
+                  >
+                    {statsSelectedEmpires.length === players.filter(p => p.status === 'active').length ? 'Deselect All' : 'Select All'}
+                  </button>
+                </div>
+                <div className="flex gap-2 flex-wrap">
+                  {players.filter(p => p.status === 'active').sort((a, b) => a.empire.localeCompare(b.empire)).map(p => {
+                    const selected = statsSelectedEmpires.includes(p.empire);
+                    return (
+                      <button
+                        key={p.empire}
+                        onClick={() => setStatsSelectedEmpires(sel =>
+                          sel.includes(p.empire) ? sel.filter(e => e !== p.empire) : [...sel, p.empire]
+                        )}
+                        className="text-xs px-3 py-1 rounded-full border transition-colors"
+                        style={{
+                          background: selected ? (p.color ?? 'var(--accent)') : 'var(--surface2)',
+                          borderColor: selected ? (p.color ?? 'var(--accent)') : 'var(--border)',
+                          color: selected ? '#fff' : 'var(--text2)',
+                        }}
+                      >
+                        {p.empire}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Action buttons */}
+              <div className="flex gap-2 flex-wrap pt-1">
+                <button
+                  className="btn-primary text-sm"
+                  disabled={processing}
+                  onClick={() => runStats(false, statsGenYear ? parseInt(statsGenYear) : year - 1, statsSelectedEmpires)}
+                >
+                  {processing && processPhase === 'stats'
+                    ? '⟳ Generating…'
+                    : statsSelectedEmpires.length > 0
+                      ? `Generate ${statsSelectedEmpires.length} Nation${statsSelectedEmpires.length !== 1 ? 's' : ''}`
+                      : 'Generate All'}
+                </button>
+                <button
+                  className="btn-ghost text-sm"
+                  disabled={processing}
+                  onClick={() => runStats(true, statsGenYear ? parseInt(statsGenYear) : year - 1, statsSelectedEmpires)}
+                >
+                  Skip Existing
+                </button>
+                {processing && processPhase === 'stats' && (
+                  <button
+                    className="btn-ghost text-sm"
+                    style={{ color: 'var(--danger)' }}
+                    onClick={() => { phaseAbortRef.current?.abort(); setProcessing(false); setProcessPhase(null); }}
+                  >
+                    Cancel
+                  </button>
+                )}
+              </div>
+
+              {/* Live log */}
+              {statsLog.length > 0 && (
+                <div className="rounded p-2 text-xs font-mono space-y-0.5" style={{ background: 'var(--surface2)', maxHeight: '10rem', overflowY: 'auto' }}>
+                  {statsLog.map((line, i) => <div key={i} style={{ color: line.startsWith('✗') ? 'var(--danger)' : line.startsWith('✓') ? '#22c55e' : 'var(--text2)' }}>{line}</div>)}
+                </div>
+              )}
+              {processError && processPhase === 'stats' && (
+                <p className="text-xs font-mono" style={{ color: 'var(--danger)' }}>{processError}</p>
+              )}
+            </div>
+
+            {/* Viewer Controls */}
             <div className="card space-y-3">
               <p className="label">View Empire Statistics</p>
               <div className="flex gap-3 flex-wrap items-end">

@@ -270,6 +270,8 @@ export async function POST(req: NextRequest, { params }: { params: { year: strin
   const body = await req.json().catch(() => ({}));
   const skipExisting: boolean = body.skipExisting ?? false;
   const forceInitial: boolean = body.forceInitial ?? false; // force web-search mode
+  // Optional allow-list: if provided, only regenerate stats for these empire names
+  const targetEmpires: string[] | null = Array.isArray(body.empires) && body.empires.length > 0 ? body.empires : null;
 
   const [players, map, archive] = await Promise.all([
     dbGet<Player[]>(k('game:players')) ?? Promise.resolve([] as Player[]),
@@ -291,7 +293,11 @@ export async function POST(req: NextRequest, { params }: { params: { year: strin
     .map((y, i) => ({ year: y, pk: allSummaries[i]?.perfectKnowledge ?? '' }))
     .filter(entry => entry.pk.trim() !== '');
 
-  const activePlayers = playerList.filter(p => p.status === 'active');
+  const allActivePlayers = playerList.filter(p => p.status === 'active');
+  // If the caller specified particular empires, restrict to those; otherwise process everyone
+  const activePlayers = targetEmpires
+    ? allActivePlayers.filter(p => targetEmpires.includes(p.empire))
+    : allActivePlayers;
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
