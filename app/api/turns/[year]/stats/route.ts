@@ -140,7 +140,7 @@ Generate the empire statistics JSON for Year ${year}. The year is ${year} — ma
     let rawJson = '';
 
     const msgStream = client.messages.stream({
-      model: 'claude-sonnet-4-5',
+      model: 'claude-sonnet-4-6',
       max_tokens: 4000,
       system: STATS_SYSTEM,
       messages: [{ role: 'user', content: userContent }],
@@ -301,10 +301,6 @@ export async function POST(req: NextRequest, { params }: { params: { year: strin
       try {
         // Load existing stats dict (to skip or merge)
         const existingStats = await dbGet<AllEmpireStats>(k(`turn:${year}:stats`)) ?? {};
-
-        // Determine if this is an initial generation (no previous year has stats)
-        const hasPrevStats = archiveList.some(async () => false); // placeholder — we check per empire
-        void hasPrevStats;
 
         send({ type: 'start', total: activePlayers.length, year });
 
