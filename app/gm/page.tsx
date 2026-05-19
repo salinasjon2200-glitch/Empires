@@ -71,7 +71,6 @@ export default function GMPage() {
   const [wcDeductAmount, setWcDeductAmount] = useState('');
   const [wcDeductReason, setWcDeductReason] = useState('');
   const [wcDeducting, setWcDeducting] = useState(false);
-  const [cooldownRemaining, setCooldownRemaining] = useState(0);
   const [newGameName, setNewGameName] = useState('');
   const [newGameYear, setNewGameYear] = useState(2032);
   const [newGameContent, setNewGameContent] = useState<'unrestricted' | 'school'>('unrestricted');
@@ -242,14 +241,6 @@ export default function GMPage() {
       const s = await stateR.json();
       setYear(s.currentYear ?? 2032);
       setTurnOpen(s.turnOpen !== false);
-      const lastCompleted = s.lastTurnCompletedAt;
-      if (lastCompleted) {
-        const next3PM = new Date(lastCompleted); next3PM.setDate(next3PM.getDate() + 1); next3PM.setHours(15, 0, 0, 0);
-        const remaining = next3PM.getTime() - Date.now();
-        setCooldownRemaining(Math.max(0, remaining));
-      } else {
-        setCooldownRemaining(0);
-      }
     }
     if (playersR.ok) { const d = await playersR.json(); setPlayers(d.players ?? []); }
     if (mapR.ok) { const d = await mapR.json(); setTerritories(d.territories ?? {}); }
@@ -347,13 +338,6 @@ export default function GMPage() {
 
   useEffect(() => { loadWarChest(); }, [loadWarChest]);
 
-  // Cooldown countdown interval
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCooldownRemaining(prev => Math.max(0, prev - 1000));
-    }, 1000);
-    return () => clearInterval(interval);
-  }, []);
 
   async function addFunds() {
     if (!wcAmount || isNaN(Number(wcAmount)) || Number(wcAmount) <= 0) return;
@@ -462,10 +446,6 @@ export default function GMPage() {
   }
 
   async function runPhase(phase: 'pk' | 'news' | 'advisors' | 'pk-regen' | 'map-gen', retryOnly = false) {
-    if (phase === 'pk' && cooldownRemaining > 0) {
-      setProcessError(`Cooldown active: ${Math.ceil(cooldownRemaining / 3600000)} hours remaining.`);
-      return;
-    }
     if (phase === 'pk') { setPhase1Done(false); setPhase2Done(false); setPhase3Done(false); }
     setProcessing(true);
     setProcessPhase(phase);
@@ -538,8 +518,14 @@ export default function GMPage() {
             } else if (event.type === 'advisor_error') {
               setProcessLog(l => [...l, `  ✗ ${event.empire} — failed${event.error ? `: ${event.error}` : ''}`]);
             } else if (event.type === 'done') {
+              // Directly load PK from the exact year the server saved it — no arithmetic guessing.
+              const loadPKFromYear = async (yr: number) => {
+                const r = await fetch(`/api/turns/${yr}/perfect-knowledge`, { headers: headers() });
+                if (r.ok) { const d = await r.json(); if ((d.perfectKnowledge ?? '').length > 100) setPrevPK(d.perfectKnowledge); }
+              };
               if (event.phase === 'pk-regen') {
                 setProcessLog(l => [...l, `✓ Perfect Knowledge regenerated for Year ${event.year}.`]);
+                await loadPKFromYear(event.year);
                 loadAll();
               } else if (event.phase === 'map-gen') {
                 setProcessLog(l => [...l, `✓ Map updated from PK for Year ${event.year}.`]);
@@ -547,6 +533,7 @@ export default function GMPage() {
               } else if (event.phase === 'pk') {
                 setProcessLog(l => [...l, `✓ Phase 1 complete. Year ${event.year} → ${event.nextYear}.`]);
                 setProcessLog(l => [...l, `Ready for Phase 2: World News Report.`]);
+                await loadPKFromYear(event.year);
                 setPhase1Done(true);
               } else if (event.phase === 'news') {
                 setProcessLog(l => [...l, `✓ Phase 2 complete. World News Report published.`]);
@@ -693,6 +680,15 @@ export default function GMPage() {
       if ((e as Error).name === 'AbortError') return;
       setProcessError(`Stats stream error: ${e}`);
     }
+
+    // Any empire still in 'streaming' state never got its empire_done — stream ended early.
+    setStatsEmpireStatus(prev => {
+      const next = { ...prev };
+      for (const empire of Object.keys(next)) {
+        if (next[empire] === 'streaming') next[empire] = 'error';
+      }
+      return next;
+    });
 
     phaseAbortRef.current = null;
     setProcessing(false);
@@ -1002,11 +998,7 @@ export default function GMPage() {
 
   const activePlayers = players.filter(p => p.status === 'active');
 
-  // Cooldown/war chest computed values
-  const cooldownHours = Math.ceil(cooldownRemaining / 3600000);
-  const cooldownMins = Math.ceil((cooldownRemaining % 3600000) / 60000);
   const warChestReady = !warChest || warChest.balance >= warChest.threshold;
-  const cooldownReady = cooldownRemaining <= 0;
 
   return (
     <div className="min-h-screen p-4">
@@ -1704,14 +1696,11 @@ export default function GMPage() {
               </div>
             )}
 
-            {/* War chest + cooldown status */}
+            {/* War chest status */}
             {warChest && (
               <div className="flex gap-4 text-sm flex-wrap">
                 <span style={{ color: warChestReady ? 'var(--success)' : 'var(--danger)' }}>
                   {warChestReady ? '✓' : '✗'} War Chest: ${warChest.balance.toFixed(2)} / ${warChest.threshold.toFixed(2)}
-                </span>
-                <span style={{ color: cooldownReady ? 'var(--success)' : 'var(--danger)' }}>
-                  {cooldownReady ? '✓ Ready to process' : `⏱ Cooldown: ${cooldownHours}h ${cooldownMins}m`}
                 </span>
               </div>
             )}
@@ -1772,12 +1761,11 @@ export default function GMPage() {
                 <button
                   className="btn-primary w-full py-2"
                   onClick={() => runPhase('pk')}
-                  disabled={processing || !cooldownReady || !warChestReady}
+                  disabled={processing || !warChestReady}
                 >
                   {processing && processPhase === 'pk'
                     ? 'Phase 1 running… do not close this page'
                     : !warChestReady ? `War Chest insufficient ($${warChest?.balance.toFixed(2)} / $${warChest?.threshold.toFixed(2)})`
-                    : !cooldownReady ? `Cooldown: ${cooldownHours}h ${cooldownMins}m remaining`
                     : phase1Done ? `↺ Re-run Phase 1 — Turn ${year}`
                     : `Run Phase 1 — Turn ${year}`}
                 </button>
@@ -2258,9 +2246,22 @@ export default function GMPage() {
                         }
                         if (chunkText) setAdvisorRegenConsoles(prev => { const n = [...prev]; n[slot] = (n[slot] ?? '') + chunkText; return n; });
                       }
-                      setAdvisorRegenStatus(prev => ({ ...prev, [p.name]: 'ok' }));
-                      if (advisorViewPlayer === p.name && advisorViewYear === year && finalReport)
-                        setAdvisorViewReport(finalReport);
+                      if (finalReport) {
+                        setAdvisorRegenStatus(prev => ({ ...prev, [p.name]: 'ok' }));
+                        if (advisorViewPlayer === p.name && advisorViewYear === year)
+                          setAdvisorViewReport(finalReport);
+                      } else {
+                        // Stream closed without a done event — check if server committed the report
+                        const checkR = await fetch(`/api/turns/${year}/advisors/${encodeURIComponent(p.name)}`, { headers: headers() }).catch(() => null);
+                        const d = checkR?.ok ? await checkR.json().catch(() => null) : null;
+                        if (d?.report) {
+                          setAdvisorRegenStatus(prev => ({ ...prev, [p.name]: 'ok' }));
+                          if (advisorViewPlayer === p.name && advisorViewYear === year)
+                            setAdvisorViewReport(d.report);
+                        } else {
+                          setAdvisorRegenStatus(prev => ({ ...prev, [p.name]: 'error' }));
+                        }
+                      }
                     } catch {
                       setAdvisorRegenStatus(prev => ({ ...prev, [p.name]: 'error' }));
                     }
@@ -2391,9 +2392,22 @@ export default function GMPage() {
                                 }
                                 if (chunkText) setAdvisorRegenConsoles(prev => { const n = [...prev]; n[0] = (n[0] ?? '') + chunkText; return n; });
                               }
-                              setAdvisorRegenStatus(prev => ({ ...prev, [p.name]: 'ok' }));
-                              if (advisorViewPlayer === p.name && advisorViewYear === advisorRegenYear && finalReport)
-                                setAdvisorViewReport(finalReport);
+                              if (finalReport) {
+                                setAdvisorRegenStatus(prev => ({ ...prev, [p.name]: 'ok' }));
+                                if (advisorViewPlayer === p.name && advisorViewYear === advisorRegenYear)
+                                  setAdvisorViewReport(finalReport);
+                              } else {
+                                // Stream closed without a done event — check if server committed the report
+                                const checkR = await fetch(`/api/turns/${advisorRegenYear}/advisors/${encodeURIComponent(p.name)}`, { headers: headers() }).catch(() => null);
+                                const d = checkR?.ok ? await checkR.json().catch(() => null) : null;
+                                if (d?.report) {
+                                  setAdvisorRegenStatus(prev => ({ ...prev, [p.name]: 'ok' }));
+                                  if (advisorViewPlayer === p.name && advisorViewYear === advisorRegenYear)
+                                    setAdvisorViewReport(d.report);
+                                } else {
+                                  setAdvisorRegenStatus(prev => ({ ...prev, [p.name]: 'error' }));
+                                }
+                              }
                             } catch {
                               setAdvisorRegenStatus(prev => ({ ...prev, [p.name]: 'error' }));
                             }
