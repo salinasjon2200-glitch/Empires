@@ -384,7 +384,7 @@ export async function POST(req: NextRequest) {
           try {
             const pkStream = client.messages.stream({
               model: 'claude-opus-4-6',
-              max_tokens: 8800 + (playerCount * 200),
+              max_tokens: 10500 + (playerCount * 0),
               system: effectivePKSystem,
               messages: [{
                 role: 'user',
@@ -559,7 +559,7 @@ Rules:
         try {
           const pkStream = client.messages.stream({
             model: 'claude-opus-4-6',
-            max_tokens: 8000 + (playerCount * 200),
+            max_tokens: 10500 + (playerCount * 0),
             system: effectivePKSystem,
             messages: [{
               role: 'user',
