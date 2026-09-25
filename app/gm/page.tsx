@@ -870,9 +870,7 @@ export default function GMPage() {
     }
   }
 
-  async function runAlerts(targetYear: number) {
-
-  async function runAlerts(targetYear: number) {s
+async function runAlerts(targetYear: number) {
     setAlertsRunning(true);
     setAlertsExtracting(false);
     setAlertsText('');
@@ -2088,19 +2086,91 @@ export default function GMPage() {
               </div>
             </div>
 
-            {historyYear && (
-              <div className="card space-y-3">
-                <p className="label">Perfect Knowledge — Year {historyYear}</p>
-                {historyLoading ? (
-                  <p className="text-sm" style={{ color: 'var(--text2)' }}>Loading...</p>
-                ) : (
-                  <div className="text-sm font-mono leading-relaxed overflow-y-auto whitespace-pre-wrap" style={{ color: 'var(--text)', maxHeight: '70vh' }}>
-                    {historyPK}
-                  </div>
-                )}
-              </div>
-            )}
+           {historyYear && (
+  <div className="card space-y-3">
+    <div className="flex items-center justify-between gap-3 flex-wrap">
+      <p className="label">
+        Perfect Knowledge — Year {historyYear}
+      </p>
 
+      {!historyLoading && (
+        <div className="flex items-center gap-2">
+          {historySaved && (
+            <span
+              className="text-xs"
+              style={{ color: 'var(--success)' }}
+            >
+              ✓ Saved
+            </span>
+          )}
+
+          <button
+            className="btn-primary text-xs"
+            style={{ padding: '0.35rem 0.85rem' }}
+            onClick={saveHistoryPK}
+            disabled={historySaving}
+          >
+            {historySaving ? 'Saving...' : 'Save Changes'}
+          </button>
+        </div>
+      )}
+    </div>
+
+    {historyLoading ? (
+      <p
+        className="text-sm"
+        style={{ color: 'var(--text2)' }}
+      >
+        Loading...
+      </p>
+    ) : (
+      <>
+        <p
+          className="text-xs"
+          style={{ color: 'var(--text2)' }}
+        >
+          You are editing the archived Perfect Knowledge document
+          for Year {historyYear}. Changes are saved to the game's
+          database and will be used by future processing.
+        </p>
+
+        <p
+          className="text-xs"
+          style={{ color: 'var(--text2)' }}
+        >
+          {historyPK.length.toLocaleString()} characters
+        </p>
+
+        <textarea
+          className="input font-mono text-xs"
+          style={{
+            minHeight: 500,
+            lineHeight: 1.5,
+            resize: 'vertical',
+          }}
+          value={historyPK}
+          onChange={e => {
+            setHistoryPK(e.target.value);
+            setHistorySaved(false);
+          }}
+          placeholder="Perfect Knowledge document..."
+        />
+
+        <div className="flex justify-end">
+          <button
+            className="btn-primary"
+            onClick={saveHistoryPK}
+            disabled={historySaving}
+          >
+            {historySaving
+              ? 'Saving...'
+              : `Save Year ${historyYear}`}
+          </button>
+        </div>
+      </>
+    )}
+  </div>
+)}
             {!historyYear && prevPK && (
               <div className="card space-y-3">
                 <p className="label">Perfect Knowledge — Year {worldNewsYear ?? year - 1} (latest)</p>
