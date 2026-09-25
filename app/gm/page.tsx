@@ -831,7 +831,7 @@ export default function GMPage() {
     }
   }
 
-  async function loadHistoryPK(yr: number) {
+   async function loadHistoryPK(yr: number) {
     setHistoryYear(yr);
     setHistoryLoading(true);
     setHistoryPK('');
@@ -841,7 +841,38 @@ export default function GMPage() {
     setHistoryLoading(false);
   }
 
+  async function saveHistoryPK() {
+    if (!historyYear) return;
+
+    setHistorySaving(true);
+    setHistorySaved(false);
+
+    try {
+      const r = await fetch(`/api/turns/${historyYear}/perfect-knowledge`, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({
+          perfectKnowledge: historyPK,
+        }),
+      });
+
+      if (r.ok) {
+        setHistorySaved(true);
+        setTimeout(() => setHistorySaved(false), 3000);
+      } else {
+        const d = await r.json().catch(() => ({}));
+        alert(`Failed to save Perfect Knowledge: ${d.error ?? r.statusText}`);
+      }
+    } catch (error) {
+      alert('Failed to save Perfect Knowledge. Check your connection and try again.');
+    } finally {
+      setHistorySaving(false);
+    }
+  }
+
   async function runAlerts(targetYear: number) {
+
+  async function runAlerts(targetYear: number) {s
     setAlertsRunning(true);
     setAlertsExtracting(false);
     setAlertsText('');
