@@ -40,6 +40,8 @@ export default function GMPage() {
   const [historyYear, setHistoryYear] = useState<number | null>(null);
   const [historyPK, setHistoryPK] = useState('');
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [historySaving, setHistorySaving] = useState(false);
+  const [historySaved, setHistorySaved] = useState(false);
   const [selectedCountry, setSelectedCountry] = useState('');
   const [assignEmpire, setAssignEmpire] = useState('');
   const [assignStatus, setAssignStatus] = useState<'active' | 'contested' | 'ungoverned' | 'remove'>('active');
