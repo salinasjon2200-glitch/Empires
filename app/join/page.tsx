@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { COUNTRIES } from '@/lib/constants';
+import GameSelector from '@/components/GameSelector';
 
 type Step = 'register' | 'bid' | 'claim' | 'done';
 
@@ -440,7 +441,7 @@ export default function JoinPage() {
   return (
     <div className="min-h-screen flex items-center justify-center p-8">
       <div className="max-w-md w-full space-y-6">
-        <div>
+             <div>
           <h1 className="display-font text-3xl font-black" style={{ color: 'var(--accent)' }}>
             JOIN EMPIRES
           </h1>
@@ -448,6 +449,8 @@ export default function JoinPage() {
             Enter the join code you received, choose your empire name, and set a password.
           </p>
         </div>
+
+        <GameSelector destination="/join" />
 
         {/* Live bidding banner */}
         {bidState?.open && (
