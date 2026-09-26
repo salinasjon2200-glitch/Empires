@@ -27,6 +27,8 @@ export interface SessionData {
   color: string;
   createdAt: number;
   gameId?: string;
+  isMergedLeader?: boolean;
+  leaderWeight?: number;
 }
 
 const SESSION_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
