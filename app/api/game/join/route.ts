@@ -44,7 +44,12 @@ export async function POST(req: NextRequest) {
     players.push(newPlayer);
     await dbSet(k('game:players'), players);
 
-    const token = await createSession(name, empire, color);
+    const token = await createSession(
+  name,
+  empire,
+  color,
+  { gameId }
+);
 
     // Find unclaimed countries
     const map = await dbGet<TerritoryMap>(k('map:territories')) ?? {};
