@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import GameSelector from '@/components/GameSelector';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -11,11 +12,26 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    fetch('/api/game/players').then(r => r.json()).then(d => {
-      setEmpires((d.players ?? []).filter((p: { status: string }) => p.status !== 'eliminated'));
-    }).catch(() => {});
-  }, []);
+useEffect(() => {
+  const params = new URLSearchParams(window.location.search);
+  const gameId = params.get('game');
+
+  if (!gameId) {
+    setEmpires([]);
+    return;
+  }
+
+  fetch('/api/game/players')
+    .then(r => r.json())
+    .then(d => {
+      setEmpires(
+        (d.players ?? []).filter(
+          (p: { status: string }) => p.status !== 'eliminated'
+        )
+      );
+    })
+    .catch(() => {});
+}, []);
 
   const isGM = selected === 'Gamemaster';
 
@@ -64,6 +80,8 @@ export default function LoginPage() {
           <p className="text-sm" style={{ color: 'var(--text2)' }}>Authenticate with your empire password to enter the game</p>
         </div>
 
+       <GameSelector destination="/login" />
+        
         <form onSubmit={login} className="card space-y-5">
           <div>
             <label className="label">Select Empire</label>
