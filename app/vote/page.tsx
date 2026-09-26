@@ -17,6 +17,26 @@ export default function VotePage() {
   const [locked, setLocked] = useState(false);
   const [preview, setPreview] = useState<Theme | null>(null);
 
+  // Load the logged-in player's empire from their session.
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('empires-player');
+      if (!saved) return;
+
+      const player = JSON.parse(saved);
+
+      if (player.sessionToken) {
+        setSessionToken(player.sessionToken);
+      }
+
+      if (player.empireName) {
+        setEmpireName(player.empireName);
+      }
+    } catch {
+      // Ignore malformed local storage.
+    }
+  }, []);
+
   useEffect(() => {
     const poll = () => {
       fetch('/api/vote').then(r => r.json()).then(d => {
@@ -79,8 +99,10 @@ export default function VotePage() {
         </div>
 
         <div>
-          <label className="label">Your Name</label>
-          <input className="input max-w-xs" placeholder="Enter your player name..." value={playerName} onChange={e => setPlayerName(e.target.value)} />
+          <label className="label">Your Empire</label>
+          <div className="input max-w-xs" style={{ opacity: empireName ? 1 : 0.6 }}>
+            {empireName || 'You must join the game first'}
+          </div>
         </div>
 
         <div className="grid grid-cols-2 gap-6">
