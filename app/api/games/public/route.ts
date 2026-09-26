@@ -17,5 +17,18 @@ export async function GET() {
       setupMode: game.setupMode,
     }));
 
+  // S2 is the original game and its data uses the legacy, unprefixed
+  // database keys. Make sure it is always available to players even if
+  // it has not been added to games:index.
+  if (!games.some(game => game.id === 's2')) {
+    games.unshift({
+      id: 's2',
+      name: 'S2 — Current Game',
+      startYear: 2032,
+      contentMode: 'unrestricted',
+      setupMode: 'bidding',
+    });
+  }
+
   return NextResponse.json({ games });
 }
