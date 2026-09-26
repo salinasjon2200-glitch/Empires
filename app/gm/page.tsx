@@ -1094,7 +1094,13 @@ async function runAlerts(targetYear: number) {
         {gamesLoaded && gamesList.length > 1 && (
           <div className="flex items-center gap-3 p-3 rounded" style={{ background: 'var(--surface2)', border: '1px solid var(--border)' }}>
             <p className="label">Active Game:</p>
-            <select className="input text-sm flex-1" value={currentGameId} onChange={e => { setCurrentGameId(e.target.value); loadAll(); }}>
+            <select className="input text-sm flex-1" value={currentGameId} onChange={e => {
+  const gameId = e.target.value;
+
+  document.cookie = `empires-game=${encodeURIComponent(gameId)}; path=/; max-age=31536000; samesite=lax`;
+
+  setCurrentGameId(gameId);
+}}
               <option value="s2">S2 — Current Game</option>
               {gamesList.map(g => <option key={g.id} value={g.id}>{g.name} ({g.id})</option>)}
             </select>
