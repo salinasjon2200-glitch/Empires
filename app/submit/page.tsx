@@ -260,13 +260,17 @@ export default function SubmitPage() {
                   Describe everything your empire does this year. Be specific. The AI GM evaluates all actions for realism.
                   Fantasy and impossible actions will be rejected or downscaled.
                 </p>
-                <textarea
-                  className="input"
-                  style={{ minHeight: 200 }}
-                  placeholder="This year, our empire will... (be as specific and detailed as you want)"
-                  value={actionText}
-                  onChange={e => setActionText(e.target.value)}
-                />
+              <textarea
+  className="input"
+  style={{ minHeight: 200 }}
+  placeholder="This year, our empire will... (1000 character maximum)"
+  value={actionText}
+  maxLength={1000}
+  onChange={e => setActionText(e.target.value)}
+/>
+<p className="text-xs text-right" style={{ color: actionText.length >= 1000 ? 'var(--danger)' : 'var(--text2)' }}>
+  {actionText.length}/1000 characters
+</p>
                 {error && <p className="danger text-sm">{error}</p>}
                 <div className="flex gap-3">
                   {editing && (
