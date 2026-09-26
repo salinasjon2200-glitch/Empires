@@ -94,6 +94,13 @@ export async function POST(req: NextRequest) {
     const session = await getSession(sessionToken);
     if (!session) return NextResponse.json({ error: 'Invalid session' }, { status: 401 });
 
+    if (session.gameId && session.gameId !== gameId) {
+      return NextResponse.json(
+        { error: 'Session belongs to another game' },
+        { status: 403 }
+      );
+    }
+
     const players = await dbGet<Player[]>(k('game:players')) ?? [];
     const player = players.find(p => p.name === session.playerName);
     if (!player) return NextResponse.json({ error: 'Player not found' }, { status: 404 });
