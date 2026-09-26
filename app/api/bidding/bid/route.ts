@@ -14,10 +14,19 @@ export async function POST(req: NextRequest) {
   const token = extractToken(req);
   if (!token) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
-  const session = await getSession(token);
-  if (!session) return NextResponse.json({ error: 'Invalid session' }, { status: 401 });
+ const session = await getSession(token);
+if (!session) {
+  return NextResponse.json({ error: 'Invalid session' }, { status: 401 });
+}
 
-  const gameId = getGameId(req);
+const gameId = getGameId(req);
+
+if (session.gameId && session.gameId !== gameId) {
+  return NextResponse.json(
+    { error: 'Session belongs to another game' },
+    { status: 403 }
+  );
+}
   const k = gk(gameId);
 
   const gameState = await dbGet<GameState>(k('game:state'));
