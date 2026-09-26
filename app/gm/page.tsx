@@ -824,6 +824,110 @@ export default function GMPage() {
     setGmStatsLoading(false);
   }
 
+  async function loadGmStats() {
+    // ...existing loadGmStats code...
+  }
+
+  async function renameGame(gameId: string, currentName: string) {
+    const newName = window.prompt(
+      `Rename game "${currentName}" to:`,
+      currentName
+    );
+
+    if (newName === null) return;
+
+    const trimmedName = newName.trim();
+
+    if (!trimmedName) {
+      alert('Game name cannot be empty.');
+      return;
+    }
+
+    const r = await fetch('/api/games', {
+      method: 'PATCH',
+      headers: headers(),
+      body: JSON.stringify({
+        id: gameId,
+        name: trimmedName,
+      }),
+    });
+
+    const d = await r.json();
+
+    if (!r.ok) {
+      alert(`Failed to rename game: ${d.error ?? 'Unknown error'}`);
+      return;
+    }
+
+    setGamesList(prev =>
+      prev.map(g =>
+        g.id === gameId
+          ? { ...g, name: trimmedName }
+          : g
+      )
+    );
+  }
+
+  async function deleteGame(
+    gameId: string,
+    gameName: string
+  ) {
+    if (gameId === 's2') {
+      alert(
+        'S2 is the legacy game and cannot be permanently deleted from this screen. Use Full Game Reset for S2.'
+      );
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `PERMANENTLY DELETE "${gameName}"?\n\n` +
+      `This will permanently delete ALL data belonging to this game, including players, turns, Perfect Knowledge, advisors, stats, maps, chats, bidding, and everything else.\n\n` +
+      `THIS CANNOT BE UNDONE.\n\n` +
+      `Click OK only if you are absolutely sure.`
+    );
+
+    if (!confirmed) return;
+
+    const r = await fetch('/api/games', {
+      method: 'DELETE',
+      headers: headers(),
+      body: JSON.stringify({
+        id: gameId,
+        confirm: 'DELETE',
+      }),
+    });
+
+    const d = await r.json();
+
+    if (!r.ok) {
+      alert(`Failed to delete game: ${d.error ?? 'Unknown error'}`);
+      return;
+    }
+
+    setGamesList(prev =>
+      prev.filter(g => g.id !== gameId)
+    );
+
+    if (currentGameId === gameId) {
+      document.cookie =
+        'empires-game=s2; path=/; max-age=31536000; samesite=lax';
+
+      setCurrentGameId('s2');
+    }
+
+    setPlayers([]);
+    setTerritories({});
+    setActions({});
+    setArchive([]);
+    setWarChest(null);
+    setGmStatsData(null);
+    setGmStatsEmpire('');
+    setGmStatsError('');
+    setGmStatsYear('');
+
+    alert(`"${gameName}" has been permanently deleted.`);
+  }
+
   async function addPlayerManually() {
     if (!addPlayerName.trim() || !addPlayerEmpire.trim() || !addPlayerPassword.trim()) {
       setAddPlayerLog('Error: name, empire, and password are all required.');
@@ -1520,59 +1624,185 @@ async function runAlerts(targetYear: number) {
                               )}
                               {action.newEmpireName && (
                                 <span className="text-sm" style={{ color: 'var(--text2)' }}>→ {action.newEmpireName}</span>
-                              )}
-                            </div>
-                            <p className="text-xs" style={{ color: 'var(--text2)' }}>{action.details}</p>
-                          </div>
-                          <div className="flex-shrink-0">
-                            {isDone ? (
-                              <span className="text-xs" style={{ color: 'var(--success)' }}>✓ Done</span>
-                            ) : isError ? (
-                              <span className="text-xs" style={{ color: 'var(--danger)' }}>✗ Failed</span>
-                            ) : (
-                              <button
-                                className="btn-primary text-xs"
-                                style={{
-                                  padding: '0.3rem 0.75rem',
-                                  fontSize: '0.7rem',
-                                  background: action.type === 'eliminate' ? 'var(--danger)' : undefined,
-                                  borderColor: action.type === 'eliminate' ? 'var(--danger)' : undefined,
-                                }}
-                                disabled={isRunning}
-                                onClick={() => executeAlertAction(idx, action)}
-                              >
-                                {isRunning ? '…' : actionLabel.btnText}
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
+            {/* Create New Game */}
+        <div className="card space-y-3">
+          <p className="label">Create New Game Instance</p>
 
-              {!alertsRunning && !alertsExtracting && alertsActions.length === 0 && alertsText && (
-                <p className="text-xs" style={{ color: 'var(--success)' }}>✓ No actionable items detected this turn.</p>
-              )}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Game Name</label>
+              <input
+                className="input text-sm"
+                placeholder="e.g. Season 3"
+                value={newGameName}
+                onChange={e => setNewGameName(e.target.value)}
+              />
             </div>
 
-            {/* Random Assignment */}
-            <div className="card space-y-3">
-              <p className="label">Random Territory Assignment</p>
-              <p className="text-xs" style={{ color: 'var(--text2)' }}>
-                Assign one territory to each active player randomly. Select countries to include in the pool.
+            <div>
+              <label className="label">Start Year</label>
+              <input
+                className="input text-sm"
+                type="number"
+                value={newGameYear}
+                onChange={e => setNewGameYear(Number(e.target.value))}
+              />
+            </div>
+
+            <div>
+              <label className="label">Content Mode</label>
+              <select
+                className="input text-sm"
+                value={newGameContent}
+                onChange={e =>
+                  setNewGameContent(
+                    e.target.value as 'unrestricted' | 'school'
+                  )
+                }
+              >
+                <option value="unrestricted">Unrestricted</option>
+                <option value="school">School-Appropriate</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="label">Setup Mode</label>
+              <select
+                className="input text-sm"
+                value={newGameSetup}
+                onChange={e =>
+                  setNewGameSetup(
+                    e.target.value as 'bidding' | 'random'
+                  )
+                }
+              >
+                <option value="bidding">Bidding</option>
+                <option value="random">Random Assignment</option>
+              </select>
+            </div>
+          </div>
+
+          <button
+            className="btn-primary text-sm"
+            disabled={creatingGame || !newGameName}
+            onClick={async () => {
+              setCreatingGame(true);
+
+              const r = await fetch('/api/games', {
+                method: 'POST',
+                headers: headers(),
+                body: JSON.stringify({
+                  name: newGameName,
+                  startYear: newGameYear,
+                  contentMode: newGameContent,
+                  setupMode: newGameSetup,
+                }),
+              });
+
+              const d = await r.json();
+
+              if (r.ok) {
+                alert(
+                  `Game created! ID: ${d.id}\nShare link: ${window.location.origin}/login?game=${d.id}`
+                );
+                setNewGameName('');
+              } else {
+                alert(`Failed: ${d.error}`);
+              }
+
+              setCreatingGame(false);
+            }}
+          >
+            {creatingGame ? 'Creating...' : 'Create Game'}
+          </button>
+        </div>
+
+        {/* Manage Existing Games */}
+        <div className="card space-y-4">
+          <p className="label">Manage Existing Games</p>
+
+          <p
+            className="text-xs"
+            style={{ color: 'var(--text2)' }}
+          >
+            Rename games or permanently delete games you no longer need.
+          </p>
+
+          <div className="space-y-2">
+            {gamesList
+              .filter(g => g.id !== 's2')
+              .map(g => (
+                <div
+                  key={g.id}
+                  className="flex items-center gap-3 p-3 rounded"
+                  style={{
+                    background: 'var(--surface2)',
+                    border: '1px solid var(--border)',
+                  }}
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold truncate">{g.name}</p>
+                    <p
+                      className="text-xs"
+                      style={{ color: 'var(--text2)' }}
+                    >
+                      ID: {g.id}
+                    </p>
+                  </div>
+
+                  <button
+                    className="btn-ghost text-xs"
+                    onClick={() => renameGame(g.id, g.name)}
+                  >
+                    ✏ Rename
+                  </button>
+
+                  <button
+                    className="btn-danger text-xs"
+                    onClick={() => deleteGame(g.id, g.name)}
+                  >
+                    🗑 Delete
+                  </button>
+                </div>
+              ))}
+
+            {gamesList.filter(g => g.id !== 's2').length === 0 && (
+              <p
+                className="text-xs"
+                style={{ color: 'var(--text2)' }}
+              >
+                No additional game instances exist yet.
               </p>
-              <div className="flex gap-3 flex-wrap">
-                <button
-                  className="btn-ghost text-sm"
-                  onClick={() => {
-                    const pool = randomPool.length > 0 ? randomPool : Object.keys(territories);
-                    const shuffled = [...pool].sort(() => Math.random() - 0.5);
-                    const newAssignments = activePlayers.slice(0, shuffled.length).map((p, i) => ({
-                      playerName: p.name,
-                      empire: p.empire,
-                      color: p.color,
+            )}
+
+            <div
+              className="flex items-center gap-3 p-3 rounded"
+              style={{
+                background: 'var(--surface2)',
+                border: '1px solid var(--border)',
+              }}
+            >
+              <div className="flex-1">
+                <p className="font-semibold">S2 — Current Game</p>
+                <p
+                  className="text-xs"
+                  style={{ color: 'var(--text2)' }}
+                >
+                  ID: s2 · Legacy game
+                </p>
+              </div>
+
+              <span
+                className="text-xs"
+                style={{ color: 'var(--text2)' }}
+              >
+                Reset only
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
                       country: shuffled[i],
                     }));
                     setRandomAssignments(newAssignments);
