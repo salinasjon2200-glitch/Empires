@@ -1,6 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import GameSelector from '@/components/GameSelector';
 
 export default function LandingPage() {
   const [phase, setPhase] = useState<number>(0);
@@ -26,6 +27,7 @@ export default function LandingPage() {
           </p>
         </div>
 
+       <GameSelector destination="/login" label="Choose a Game" />
         <div className="card space-y-4">
           <h2 className="display-font text-xs tracking-widest uppercase" style={{ color: 'var(--text2)' }}>
             Current Phase
