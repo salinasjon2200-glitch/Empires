@@ -21,8 +21,14 @@ export async function GET(req: NextRequest) {
 
   const token = extractToken(req);
   if (!token) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-  const session = await getSession(token);
-  if (!session) return NextResponse.json({ error: 'Invalid session' }, { status: 401 });
+ const session = await getSession(token);
+if (!session) {
+  return NextResponse.json({ error: 'Invalid session' }, { status: 401 });
+}
+
+if (session.gameId && session.gameId !== gameId) {
+  return NextResponse.json({ error: 'Session belongs to another game' }, { status: 403 });
+}
 
   // Merged leader: return only their own portion
   if (session.isMergedLeader) {
@@ -41,9 +47,14 @@ export async function POST(req: NextRequest) {
   const token = extractToken(req);
   if (!token) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
-  const session = await getSession(token);
-  if (!session) return NextResponse.json({ error: 'Invalid session' }, { status: 401 });
+const session = await getSession(token);
+if (!session) {
+  return NextResponse.json({ error: 'Invalid session' }, { status: 401 });
+}
 
+if (session.gameId && session.gameId !== gameId) {
+  return NextResponse.json({ error: 'Session belongs to another game' }, { status: 403 });
+}
   const players = await dbGet<Player[]>(k('game:players')) ?? [];
   const empire = players.find(p => p.empire === session.empireName);
   if (empire?.status === 'eliminated') {
