@@ -236,28 +236,58 @@ export default function GMPage() {
 
   const loadAll = useCallback(async () => {
     if (!authed) return;
+
+    // Use the currently selected game for every game-specific request.
+    const h = headers();
+
     const [stateR, playersR, mapR, actionsR] = await Promise.all([
-      fetch('/api/game/state'),
-      fetch('/api/game/setup', { headers: headers() }),
-      fetch('/api/map/territories'),
-      fetch('/api/turns/actions', { headers: headers() }),
+      fetch('/api/game/state', { headers: h }),
+      fetch('/api/game/setup', { headers: h }),
+      fetch('/api/map/territories', { headers: h }),
+      fetch('/api/turns/actions', { headers: h }),
     ]);
+
+    let currentYear = 2032;
+
     if (stateR.ok) {
       const s = await stateR.json();
-      setYear(s.currentYear ?? 2032);
+      currentYear = s.currentYear ?? 2032;
+      setYear(currentYear);
       setTurnOpen(s.turnOpen !== false);
     }
-    if (playersR.ok) { const d = await playersR.json(); setPlayers(d.players ?? []); }
-    if (mapR.ok) { const d = await mapR.json(); setTerritories(d.territories ?? {}); }
-    if (actionsR.ok) { const d = await actionsR.json(); setActions(d.actions ?? {}); }
+
+    if (playersR.ok) {
+      const d = await playersR.json();
+      setPlayers(d.players ?? []);
+    }
+
+    if (mapR.ok) {
+      const d = await mapR.json();
+      setTerritories(d.territories ?? {});
+    }
+
+    if (actionsR.ok) {
+      const d = await actionsR.json();
+      setActions(d.actions ?? {});
+    }
+
     const [archR, wcR] = await Promise.all([
-      fetch('/api/game/archive'),
-      fetch('/api/war-chest', { headers: headers() }),
+      fetch('/api/game/archive', { headers: h }),
+      fetch('/api/war-chest', { headers: h }),
     ]);
-    if (archR.ok) { const d = await archR.json(); setArchive(d.archive ?? []); }
-    if (wcR.ok) { const d = await wcR.json(); setWarChest(d.warChest); }
+
+    if (archR.ok) {
+      const d = await archR.json();
+      setArchive(d.archive ?? []);
+    }
+
+    if (wcR.ok) {
+      const d = await wcR.json();
+      setWarChest(d.warChest);
+    }
+
     // Bidding state
-    const bidR = await fetch('/api/bidding/state');
+    const bidR = await fetch('/api/bidding/state', { headers: h });
     if (bidR.ok) {
       const d = await bidR.json();
       setBiddingOpen(d.open ?? false);
@@ -266,39 +296,77 @@ export default function GMPage() {
       setBiddingPoints(d.points ?? {});
     }
 
-    // Phase 1 always saves PK to turn:(currentYear-1) because it advances the year
-    // before streaming. Only check currentYear-1; never fall back to currentYear
-    // (which may hold stale or garbage data from previous bad runs).
+    // Phase 1 always saves PK to turn:(currentYear-1) because it advances
+    // the year before streaming. Only check currentYear-1.
     if (stateR.ok) {
-      const currentYear = (await fetch('/api/game/state').then(r => r.json()).catch(() => ({ currentYear: 2032 }))).currentYear ?? 2032;
       const pkYear = currentYear - 1;
-      const MIN_LEN = 200; // real documents are always longer than this
+      const MIN_LEN = 200;
 
-      const pkR2 = await fetch(`/api/turns/${pkYear}/perfect-knowledge`, { headers: headers() });
+      const pkR2 = await fetch(
+        `/api/turns/${pkYear}/perfect-knowledge`,
+        { headers: h }
+      );
+
       let hasPK = false;
+
       if (pkR2.ok) {
         const d = await pkR2.json();
         const pk = d.perfectKnowledge ?? '';
-        if (pk.length >= MIN_LEN) { setPrevPK(pk); hasPK = true; } else { setPrevPK(''); }
-      } else { setPrevPK(''); }
 
-      const newsR2 = await fetch(`/api/turns/${pkYear}/summary`);
+        if (pk.length >= MIN_LEN) {
+          setPrevPK(pk);
+          hasPK = true;
+        } else {
+          setPrevPK('');
+        }
+      } else {
+        setPrevPK('');
+      }
+
+      const newsR2 = await fetch(
+        `/api/turns/${pkYear}/summary`,
+        { headers: h }
+      );
+
       let hasNews = false;
+
       if (newsR2.ok) {
         const d = await newsR2.json();
         const news = d.publicSummary ?? '';
-        if (news.length >= MIN_LEN) { setWorldNews(news); setWorldNewsYear(pkYear); hasNews = true; }
-        else { setWorldNews(''); setWorldNewsYear(pkYear); }
-      } else { setWorldNews(''); }
+
+        if (news.length >= MIN_LEN) {
+          setWorldNews(news);
+          setWorldNewsYear(pkYear);
+          hasNews = true;
+        } else {
+          setWorldNews('');
+          setWorldNewsYear(pkYear);
+        }
+      } else {
+        setWorldNews('');
+        setWorldNewsYear(pkYear);
+      }
 
       // Restore phase completion state
       setPhase1Done(hasPK);
       setPhase2Done(hasPK && hasNews);
+
       if (hasPK && hasNews) {
-        const playersList = (await fetch('/api/game/setup', { headers: headers() }).then(r => r.json()).catch(() => ({ players: [] }))).players ?? [];
-        const firstActive = (playersList as { status: string; name: string }[]).find(p => p.status === 'active');
+        const playersList = (
+          await fetch('/api/game/setup', { headers: h })
+            .then(r => r.json())
+            .catch(() => ({ players: [] }))
+        ).players ?? [];
+
+        const firstActive = (
+          playersList as { status: string; name: string }[]
+        ).find(p => p.status === 'active');
+
         if (firstActive) {
-          const advR = await fetch(`/api/turns/${pkYear}/advisors/${encodeURIComponent(firstActive.name)}`, { headers: headers() });
+          const advR = await fetch(
+            `/api/turns/${pkYear}/advisors/${encodeURIComponent(firstActive.name)}`,
+            { headers: h }
+          );
           setPhase3Done(advR.ok);
         }
       } else {
