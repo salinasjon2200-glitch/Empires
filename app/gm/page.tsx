@@ -3740,18 +3740,26 @@ async function runAlerts(targetYear: number) {
                       }),
                     });
                     const d = await r.json();
-                    if (r.ok) {
+                                     if (r.ok) {
                       setResetLog(
                         `✓ Reset complete. Deleted ${d.deletedKnownKeys + d.deletedWildcardKeys} keys. ` +
                         `New game starts at Year ${resetStartYear}.` +
                         (resetOpenBidding ? ' Bidding is now open.' : '')
                       );
                       setResetConfirm('');
+
                       // Refresh GM page state
                       setPlayers([]);
                       setTerritories({});
                       setActions({});
                       setYear(resetStartYear);
+
+                      // Clear any stats from the previous game/reset
+                      // that are still being displayed in the browser.
+                      setGmStatsData(null);
+                      setGmStatsEmpire('');
+                      setGmStatsError('');
+                      setGmStatsYear('');
                     } else {
                       setResetLog(`✗ Error: ${d.error}`);
                     }
