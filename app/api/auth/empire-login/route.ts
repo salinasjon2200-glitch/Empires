@@ -21,10 +21,11 @@ export async function POST(req: NextRequest) {
       for (const leader of player.leaders) {
         const valid = await verifyPassword(password, leader.passwordHash);
         if (valid) {
-          const token = await createSession(leader.name, player.empire, player.color, {
-            isMergedLeader: true,
-            leaderWeight: leader.weight,
-          });
+     const token = await createSession(leader.name, player.empire, player.color, {
+  gameId,
+  isMergedLeader: true,
+  leaderWeight: leader.weight,
+});
           return NextResponse.json({
             sessionToken: token,
             playerName: leader.name,
@@ -45,8 +46,12 @@ export async function POST(req: NextRequest) {
     const valid = await verifyPassword(password, player.passwordHash);
     if (!valid) return NextResponse.json({ error: 'Invalid empire password' }, { status: 401 });
 
-    const token = await createSession(player.name, player.empire, player.color);
-
+const token = await createSession(
+  player.name,
+  player.empire,
+  player.color,
+  { gameId }
+);
     return NextResponse.json({
       sessionToken: token,
       playerName: player.name,
