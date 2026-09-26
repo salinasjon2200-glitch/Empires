@@ -76,6 +76,7 @@ export async function POST(req: NextRequest) {
     const results = await Promise.all([
       dbKeys(k('turn:*:advisor:*')),
       dbKeys(k('turn:*:leader-actions:*')),
+      dbKeys(k('turn:*:stats')),
       dbKeys(k('chat:private:*')),
       dbKeys(k('chat:group:*')),
     ]);
