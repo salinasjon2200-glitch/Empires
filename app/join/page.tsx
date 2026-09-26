@@ -107,8 +107,12 @@ export default function JoinPage() {
       status: 'active',
     }));
 
+    // If bidding is currently open, send the player to bidding.
+    // Otherwise, allow them to manually claim up to 5 starting territories.
+    const currentBidState = await loadBidState();
+
     setLoading(false);
-    setStep('claim');
+    setStep(currentBidState?.open ? 'bid' : 'claim');
   }
 
   // ── Place a bid ─────────────────────────────────────────────────────────
