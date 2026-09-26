@@ -85,6 +85,16 @@ export async function POST(req: NextRequest) {
     if (!sessionToken || !territories || !Array.isArray(territories)) {
       return NextResponse.json({ error: 'Missing sessionToken or territories' }, { status: 400 });
     }
+
+    // Players may only manually claim starting territories when bidding is NOT open.
+    // During bidding, territories are assigned exclusively through the bidding system.
+    if (state?.biddingOpen) {
+      return NextResponse.json(
+        { error: 'Bidding is currently open. You cannot claim territories until bidding has ended.' },
+        { status: 400 }
+      );
+    }
+
     if (territories.length > 5) {
       return NextResponse.json({ error: 'Maximum 5 territories allowed' }, { status: 400 });
     }
