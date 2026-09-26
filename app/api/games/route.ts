@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { dbGet, dbSet } from '@/lib/db';
-import { extractGMToken } from '@/lib/auth';
+import { dbGet, dbSet, dbDel, dbKeys } from '@/lib/db';import { extractGMToken } from '@/lib/auth';
 import { GameInstance, GameState, WarChest } from '@/lib/types';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -63,12 +62,151 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  if (!extractGMToken(req)) return NextResponse.json({ error: 'GM auth required' }, { status: 401 });
-  const { id, status } = await req.json();
+  if (!extractGMToken(req)) {
+    return NextResponse.json({ error: 'GM auth required' }, { status: 401 });
+  }
+
+  const { id, status, name } = await req.json();
+
   const index = await dbGet<GameInstance[]>('games:index') ?? [];
   const i = index.findIndex(g => g.id === id);
-  if (i === -1) return NextResponse.json({ error: 'Game not found' }, { status: 404 });
-  index[i] = { ...index[i], status };
+
+  if (i === -1) {
+    return NextResponse.json({ error: 'Game not found' }, { status: 404 });
+  }
+
+  // Rename the game
+  if (name !== undefined) {
+    const trimmedName = String(name).trim();
+
+    if (!trimmedName) {
+      return NextResponse.json(
+        { error: 'Game name cannot be empty' },
+        { status: 400 }
+      );
+    }
+
+    // Don't allow two games to have the same name.
+    const duplicate = index.some(
+      (g, indexNumber) =>
+        indexNumber !== i &&
+        g.name.trim().toLowerCase() === trimmedName.toLowerCase()
+    );
+
+    if (duplicate) {
+      return NextResponse.json(
+        { error: 'A game with that name already exists' },
+        { status: 409 }
+      );
+    }
+
+    index[i] = {
+      ...index[i],
+      name: trimmedName,
+    };
+  }
+
+  // Preserve the existing status functionality.
+  if (status !== undefined) {
+    index[i] = {
+      ...index[i],
+      status,
+    };
+  }
+
   await dbSet('games:index', index);
-  return NextResponse.json({ ok: true });
+
+  return NextResponse.json({
+    ok: true,
+    game: index[i],
+  });
+}
+export async function DELETE(req: NextRequest) {
+  if (!extractGMToken(req)) {
+    return NextResponse.json({ error: 'GM auth required' }, { status: 401 });
+  }
+
+  const { id, confirm } = await req.json();
+
+  if (confirm !== 'DELETE') {
+    return NextResponse.json(
+      { error: 'Confirmation string must be exactly "DELETE"' },
+      { status: 400 }
+    );
+  }
+
+  // S2 is the original legacy game and uses unprefixed database keys.
+  if (!id || id === 's2') {
+    return NextResponse.json(
+      {
+        error:
+          'The legacy S2 game cannot be deleted here. Use Full Game Reset for S2.'
+      },
+      { status: 400 }
+    );
+  }
+
+  const index = await dbGet<GameInstance[]>('games:index') ?? [];
+  const game = index.find(g => g.id === id);
+
+  if (!game) {
+    return NextResponse.json(
+      { error: 'Game not found' },
+      { status: 404 }
+    );
+  }
+
+  // Every normal game stores its data under:
+  // gameId:...
+  //
+  // Delete every key belonging to that game.
+  let gameKeys: string[] = [];
+
+  try {
+    gameKeys = await dbKeys(`${id}:*`);
+  } catch {
+    gameKeys = [];
+  }
+
+  // Sessions are stored separately from the game namespace.
+  // Delete sessions belonging to this game too.
+  let sessionKeys: string[] = [];
+
+  try {
+    const allSessionKeys = await dbKeys('session:*');
+    const matchingSessions: string[] = [];
+
+    for (const key of allSessionKeys) {
+      const session = await dbGet<{ gameId?: string }>(key);
+
+      if (session?.gameId === id) {
+        matchingSessions.push(key);
+      }
+    }
+
+    sessionKeys = matchingSessions;
+  } catch {
+    sessionKeys = [];
+  }
+
+  const keysToDelete = [
+    ...new Set([
+      ...gameKeys,
+      ...sessionKeys,
+    ]),
+  ];
+
+  await Promise.all(
+    keysToDelete.map(key => dbDel(key).catch(() => {}))
+  );
+
+  // Remove the game itself from the game index.
+  const newIndex = index.filter(g => g.id !== id);
+  await dbSet('games:index', newIndex);
+
+  return NextResponse.json({
+    ok: true,
+    deletedGame: game,
+    deletedKeys: keysToDelete.length,
+  });
 }
