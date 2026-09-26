@@ -30,13 +30,19 @@ export async function POST(req: NextRequest) {
     }
 
     const players = await dbGet<Player[]>(k('game:players')) ?? [];
-    if (players.find(p => p.empire.toLowerCase() === empire.toLowerCase())) {
+    // Only active players/empires reserve their names.
+    // Eliminated players are allowed to rejoin using the same name.
+    if (players.find(
+      p => p.status === 'active' && p.empire.toLowerCase() === empire.toLowerCase()
+    )) {
       return NextResponse.json({ error: 'Empire name already taken' }, { status: 409 });
     }
-    if (players.find(p => p.name.toLowerCase() === name.toLowerCase())) {
+
+    if (players.find(
+      p => p.status === 'active' && p.name.toLowerCase() === name.toLowerCase()
+    )) {
       return NextResponse.json({ error: 'Player name already taken' }, { status: 409 });
     }
-
     const color = PLAYER_COLORS[players.length % PLAYER_COLORS.length];
     const passwordHash = await hashPassword(password);
     const joinedYear = state?.currentYear ?? 2032;
