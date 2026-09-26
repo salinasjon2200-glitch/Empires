@@ -22,13 +22,11 @@ export function generateToken(): string {
 
 export interface SessionData {
   token: string;
-  playerName: string;   // for merged leaders: the leader's own name
+  playerName: string;
   empireName: string;
   color: string;
   createdAt: number;
-  // Merged empire leaders only
-  isMergedLeader?: boolean;
-  leaderWeight?: number;
+  gameId?: string;
 }
 
 const SESSION_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
@@ -37,8 +35,26 @@ export async function createSession(
   playerName: string,
   empireName: string,
   color: string,
-  extras?: { isMergedLeader?: boolean; leaderWeight?: number }
+  extras?: {
+    gameId?: string;
+    isMergedLeader?: boolean;
+    leaderWeight?: number;
+  }
 ): Promise<string> {
+  const token = generateToken();
+
+  const session: SessionData = {
+    token,
+    playerName,
+    empireName,
+    color,
+    createdAt: Date.now(),
+    ...extras,
+  };
+
+  await dbSet(`session:${token}`, session);
+  return token;
+}
   const token = generateToken();
   const session: SessionData = { token, playerName, empireName, color, createdAt: Date.now(), ...extras };
   await dbSet(`session:${token}`, session);
