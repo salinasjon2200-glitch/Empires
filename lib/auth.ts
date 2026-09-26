@@ -55,11 +55,7 @@ export async function createSession(
   await dbSet(`session:${token}`, session);
   return token;
 }
-  const token = generateToken();
-  const session: SessionData = { token, playerName, empireName, color, createdAt: Date.now(), ...extras };
-  await dbSet(`session:${token}`, session);
-  return token;
-}
+
 
 export async function getSession(token: string): Promise<SessionData | null> {
   if (!token) return null;
