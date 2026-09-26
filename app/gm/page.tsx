@@ -3759,7 +3759,7 @@ function JoinPasswordCard({ gmPassword, currentGameId }: { gmPassword: string; c
         They will pick 5 unclaimed starting territories.
       </p>
       <div className="flex gap-2 items-center text-xs p-2 rounded" style={{ background: 'var(--surface2)', color: 'var(--accent)' }}>
-        <span className="font-mono flex-1">{typeof window !== 'undefined' ? window.location.origin : ''}/join</span>
+        <span className="font-mono flex-1">{typeof window !== 'undefined' ? window.location.origin : ''}/join?game={currentGameId}</span>
       </div>
       {current ? (
         <div className="space-y-2">
