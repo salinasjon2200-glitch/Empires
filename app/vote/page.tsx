@@ -7,7 +7,8 @@ type Theme = 'dark-military' | 'clean-modern';
 
 export default function VotePage() {
   const { setTheme } = useTheme();
-  const [playerName, setPlayerName] = useState('');
+  const [sessionToken, setSessionToken] = useState('');
+  const [empireName, setEmpireName] = useState('');
   const [tally, setTally] = useState({ 'dark-military': 0, 'clean-modern': 0 });
   const [votes, setVotes] = useState<Record<string, Theme>>({});
   const [voted, setVoted] = useState<Theme | null>(null);
@@ -29,12 +30,24 @@ export default function VotePage() {
   }, []);
 
   async function vote(theme: Theme) {
-    if (!playerName.trim()) { alert('Enter your name first'); return; }
-    await fetch('/api/vote', {
+    if (!sessionToken) {
+      alert('You must be logged in to vote.');
+      return;
+    }
+
+    const r = await fetch('/api/vote', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ playerName: playerName.trim(), theme }),
+      body: JSON.stringify({ sessionToken, theme }),
     });
+
+    const d = await r.json();
+
+    if (!r.ok) {
+      alert(d.error ?? 'Vote failed');
+      return;
+    }
+
     setVoted(theme);
   }
 
