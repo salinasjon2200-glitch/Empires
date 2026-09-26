@@ -1168,7 +1168,7 @@ async function runAlerts(targetYear: number) {
   document.cookie = `empires-game=${encodeURIComponent(gameId)}; path=/; max-age=31536000; samesite=lax`;
 
   setCurrentGameId(gameId);
-}}
+}}>
               <option value="s2">S2 — Current Game</option>
               {gamesList.map(g => <option key={g.id} value={g.id}>{g.name} ({g.id})</option>)}
             </select>
