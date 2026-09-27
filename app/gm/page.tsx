@@ -1530,382 +1530,563 @@ async function runAlerts(targetYear: number) {
               </div>
             </div>
 
-            {/* GM Alerts */}
-            <div className="card space-y-3 lg:col-span-3">
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <div>
-                  <p className="label" style={{ color: 'var(--accent)' }}>🚨 GM Alerts — AI Action Review</p>
-                  <p className="text-xs mt-0.5" style={{ color: 'var(--text2)' }}>
-                    Reads the Perfect Knowledge document and identifies GM panel actions: eliminations, merges, renames, password resets.
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <select
-                    className="input text-sm"
-                    value={alertsYear ?? ''}
-                    onChange={e => setAlertsYear(Number(e.target.value))}
-                  >
-                    <option value="">— Select year —</option>
-                    {[...archive].sort((a, b) => b - a).map(yr => (
-                      <option key={yr} value={yr}>{yr}</option>
-                    ))}
-                    <option value={year - 1}>Year {year - 1} (latest)</option>
-                  </select>
-                  <button
-                    className="btn-primary text-sm"
-                    disabled={alertsRunning || alertsExtracting || !alertsYear}
-                    onClick={() => alertsYear && runAlerts(alertsYear)}
-                  >
-                    {alertsRunning ? 'Analyzing…' : alertsExtracting ? 'Extracting…' : '⚡ Run Analysis'}
-                  </button>
-                  {alertsText && (
-                    <button className="btn-ghost text-xs" onClick={() => { setAlertsText(''); setAlertsActions([]); setAlertsActionStatus({}); }}>Clear</button>
-                  )}
-                </div>
-              </div>
-              {alertsError && <p className="text-sm" style={{ color: 'var(--danger)' }}>{alertsError}</p>}
+{/* GM Alerts */}
+<div className="card space-y-3 lg:col-span-3">
+  <div className="flex items-center justify-between flex-wrap gap-2">
+    <div>
+      <p className="label" style={{ color: 'var(--accent)' }}>
+        🚨 GM Alerts — AI Action Review
+      </p>
+      <p className="text-xs mt-0.5" style={{ color: 'var(--text2)' }}>
+        Reads the Perfect Knowledge document and identifies GM panel actions:
+        eliminations, merges, renames, password resets.
+      </p>
+    </div>
 
-              {/* Streaming analysis text */}
-              {(alertsRunning || alertsExtracting || alertsText) && (
-                <div
-                  className="text-sm leading-relaxed p-3 rounded whitespace-pre-wrap"
-                  style={{ background: 'var(--surface2)', color: 'var(--text)', maxHeight: '40vh', overflowY: 'auto', fontFamily: 'inherit' }}
-                >
-                  {alertsText || <span style={{ color: 'var(--text2)' }}>Analyzing Perfect Knowledge…</span>}
-                  {alertsRunning && <span style={{ opacity: 0.5 }}>▊</span>}
-                  {alertsExtracting && <span style={{ color: 'var(--text2)', fontStyle: 'italic' }}>\n\n⚙️ Extracting actions…</span>}
-                </div>
-              )}
+    <div className="flex items-center gap-2">
+      <select
+        className="input text-sm"
+        value={alertsYear ?? ''}
+        onChange={e => setAlertsYear(Number(e.target.value))}
+      >
+        <option value="">— Select year —</option>
+        {[...archive].sort((a, b) => b - a).map(yr => (
+          <option key={yr} value={yr}>{yr}</option>
+        ))}
+        <option value={year - 1}>Year {year - 1} (latest)</option>
+      </select>
 
-              {/* Detected action buttons */}
-              {alertsActions.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text2)' }}>
-                    Detected Actions ({alertsActions.filter((_, i) => alertsActionStatus[i] !== 'done').length} pending)
-                  </p>
-                  <div className="space-y-2">
-                    {alertsActions.map((action, idx) => {
-                      const status = alertsActionStatus[idx];
-                      const isDone = status === 'done';
-                      const isRunning = status === 'running';
-                      const isError = status === 'error';
+      <button
+        className="btn-primary text-sm"
+        disabled={alertsRunning || alertsExtracting || !alertsYear}
+        onClick={() => alertsYear && runAlerts(alertsYear)}
+      >
+        {alertsRunning
+          ? 'Analyzing…'
+          : alertsExtracting
+            ? 'Extracting…'
+            : '⚡ Run Analysis'}
+      </button>
 
-                      const actionLabel = action.type === 'eliminate'
-                        ? { icon: '🔴', color: 'var(--danger)', label: 'ELIMINATE', btnText: 'Eliminate Now', empire: action.empire }
-                        : action.type === 'rename'
-                        ? { icon: '✏️', color: 'var(--accent)', label: 'RENAME', btnText: 'Pre-fill Rename Form', empire: action.empire }
-                        : action.type === 'merge'
-                        ? { icon: '⚔️', color: '#f59e0b', label: 'MERGE', btnText: 'Pre-fill Merge Form', empire: action.empires?.join(' + ') }
-                        : action.type === 'reset_password'
-                        ? { icon: '🔑', color: '#a78bfa', label: 'RESET PASSWORD', btnText: 'Go to Password Reset', empire: action.empire }
-                        : { icon: '⚠️', color: 'var(--text2)', label: 'NOTE', btnText: 'Acknowledge', empire: action.empire ?? '' };
+      {alertsText && (
+        <button
+          className="btn-ghost text-xs"
+          onClick={() => {
+            setAlertsText('');
+            setAlertsActions([]);
+            setAlertsActionStatus({});
+          }}
+        >
+          Clear
+        </button>
+      )}
+    </div>
+  </div>
 
-                      return (
-                        <div
-                          key={idx}
-                          className="flex items-start gap-3 px-3 py-2 rounded"
-                          style={{
-                            background: 'var(--surface2)',
-                            border: `1px solid ${isDone ? 'var(--success)' : isError ? 'var(--danger)' : 'var(--border)'}`,
-                            opacity: isDone ? 0.6 : 1,
-                          }}
-                        >
-                          <span className="text-base flex-shrink-0 mt-0.5">{actionLabel.icon}</span>
-                          <div className="flex-1 min-w-0 space-y-0.5">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-xs font-bold uppercase tracking-wide" style={{ color: actionLabel.color }}>
-                                {actionLabel.label}
-                              </span>
-                              {actionLabel.empire && (
-                                <span className="text-sm font-semibold">{actionLabel.empire}</span>
-                              )}
-                              {action.newEmpireName && (
-                                <span className="text-sm" style={{ color: 'var(--text2)' }}>→ {action.newEmpireName}</span>
-            {/* Create New Game */}
-        <div className="card space-y-3">
-          <p className="label">Create New Game Instance</p>
+  {alertsError && (
+    <p className="text-sm" style={{ color: 'var(--danger)' }}>
+      {alertsError}
+    </p>
+  )}
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="label">Game Name</label>
-              <input
-                className="input text-sm"
-                placeholder="e.g. Season 3"
-                value={newGameName}
-                onChange={e => setNewGameName(e.target.value)}
-              />
-            </div>
+  {(alertsRunning || alertsExtracting || alertsText) && (
+    <div
+      className="text-sm leading-relaxed p-3 rounded whitespace-pre-wrap"
+      style={{
+        background: 'var(--surface2)',
+        color: 'var(--text)',
+        maxHeight: '40vh',
+        overflowY: 'auto',
+        fontFamily: 'inherit',
+      }}
+    >
+      {alertsText || (
+        <span style={{ color: 'var(--text2)' }}>
+          Analyzing Perfect Knowledge…
+        </span>
+      )}
 
-            <div>
-              <label className="label">Start Year</label>
-              <input
-                className="input text-sm"
-                type="number"
-                value={newGameYear}
-                onChange={e => setNewGameYear(Number(e.target.value))}
-              />
-            </div>
+      {alertsRunning && <span style={{ opacity: 0.5 }}>▊</span>}
 
-            <div>
-              <label className="label">Content Mode</label>
-              <select
-                className="input text-sm"
-                value={newGameContent}
-                onChange={e =>
-                  setNewGameContent(
-                    e.target.value as 'unrestricted' | 'school'
-                  )
+      {alertsExtracting && (
+        <span
+          style={{
+            color: 'var(--text2)',
+            fontStyle: 'italic',
+          }}
+        >
+          {'\n\n'}⚙️ Extracting actions…
+        </span>
+      )}
+    </div>
+  )}
+
+  {alertsActions.length > 0 && (
+    <div className="space-y-2">
+      <p
+        className="text-xs font-semibold uppercase tracking-wide"
+        style={{ color: 'var(--text2)' }}
+      >
+        Detected Actions (
+        {alertsActions.filter(
+          (_, i) => alertsActionStatus[i] !== 'done'
+        ).length}{' '}
+        pending)
+      </p>
+
+      <div className="space-y-2">
+        {alertsActions.map((action, idx) => {
+          const status = alertsActionStatus[idx];
+          const isDone = status === 'done';
+          const isRunning = status === 'running';
+          const isError = status === 'error';
+
+          const actionLabel =
+            action.type === 'eliminate'
+              ? {
+                  icon: '🔴',
+                  color: 'var(--danger)',
+                  label: 'ELIMINATE',
+                  btnText: 'Eliminate Now',
+                  empire: action.empire,
                 }
-              >
-                <option value="unrestricted">Unrestricted</option>
-                <option value="school">School-Appropriate</option>
-              </select>
-            </div>
+              : action.type === 'rename'
+                ? {
+                    icon: '✏️',
+                    color: 'var(--accent)',
+                    label: 'RENAME',
+                    btnText: 'Pre-fill Rename Form',
+                    empire: action.empire,
+                  }
+                : action.type === 'merge'
+                  ? {
+                      icon: '⚔️',
+                      color: '#f59e0b',
+                      label: 'MERGE',
+                      btnText: 'Pre-fill Merge Form',
+                      empire: action.empires?.join(' + '),
+                    }
+                  : action.type === 'reset_password'
+                    ? {
+                        icon: '🔑',
+                        color: '#a78bfa',
+                        label: 'RESET PASSWORD',
+                        btnText: 'Go to Password Reset',
+                        empire: action.empire,
+                      }
+                    : {
+                        icon: '⚠️',
+                        color: 'var(--text2)',
+                        label: 'NOTE',
+                        btnText: 'Acknowledge',
+                        empire: action.empire ?? '',
+                      };
 
-            <div>
-              <label className="label">Setup Mode</label>
-              <select
-                className="input text-sm"
-                value={newGameSetup}
-                onChange={e =>
-                  setNewGameSetup(
-                    e.target.value as 'bidding' | 'random'
-                  )
-                }
-              >
-                <option value="bidding">Bidding</option>
-                <option value="random">Random Assignment</option>
-              </select>
-            </div>
-          </div>
-
-          <button
-            className="btn-primary text-sm"
-            disabled={creatingGame || !newGameName}
-            onClick={async () => {
-              setCreatingGame(true);
-
-              const r = await fetch('/api/games', {
-                method: 'POST',
-                headers: headers(),
-                body: JSON.stringify({
-                  name: newGameName,
-                  startYear: newGameYear,
-                  contentMode: newGameContent,
-                  setupMode: newGameSetup,
-                }),
-              });
-
-              const d = await r.json();
-
-                          if (r.ok) {
-                setGamesList(prev => [...prev, d.instance]);
-                setNewGameName('');
-
-                alert(
-                  `Game created! ID: ${d.id}\nShare link: ${window.location.origin}/login?game=${d.id}`
-                );
-              } else {
-                alert(`Failed: ${d.error}`);
-              }
-
-              setCreatingGame(false);
-            }}
-          >
-            {creatingGame ? 'Creating...' : 'Create Game'}
-          </button>
-        </div>
-
-        {/* Manage Existing Games */}
-        <div className="card space-y-4">
-          <p className="label">Manage Existing Games</p>
-
-          <p
-            className="text-xs"
-            style={{ color: 'var(--text2)' }}
-          >
-            Rename games or permanently delete games you no longer need.
-          </p>
-
-          <div className="space-y-2">
-            {gamesList
-              .filter(g => g.id !== 's2')
-              .map(g => (
-                <div
-                  key={g.id}
-                  className="flex items-center gap-3 p-3 rounded"
-                  style={{
-                    background: 'var(--surface2)',
-                    border: '1px solid var(--border)',
-                  }}
-                >
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold truncate">{g.name}</p>
-                    <p
-                      className="text-xs"
-                      style={{ color: 'var(--text2)' }}
-                    >
-                      ID: {g.id}
-                    </p>
-                  </div>
-
-                  <button
-                    className="btn-ghost text-xs"
-                    onClick={() => renameGame(g.id, g.name)}
-                  >
-                    ✏ Rename
-                  </button>
-
-                  <button
-                    className="btn-danger text-xs"
-                    onClick={() => deleteGame(g.id, g.name)}
-                  >
-                    🗑 Delete
-                  </button>
-                </div>
-              ))}
-
-            {gamesList.filter(g => g.id !== 's2').length === 0 && (
-              <p
-                className="text-xs"
-                style={{ color: 'var(--text2)' }}
-              >
-                No additional game instances exist yet.
-              </p>
-            )}
-
+          return (
             <div
-              className="flex items-center gap-3 p-3 rounded"
+              key={idx}
+              className="flex items-start gap-3 px-3 py-2 rounded"
               style={{
                 background: 'var(--surface2)',
-                border: '1px solid var(--border)',
+                border: `1px solid ${
+                  isDone
+                    ? 'var(--success)'
+                    : isError
+                      ? 'var(--danger)'
+                      : 'var(--border)'
+                }`,
+                opacity: isDone ? 0.6 : 1,
               }}
             >
-              <div className="flex-1">
-                <p className="font-semibold">S2 — Current Game</p>
+              <span className="text-base flex-shrink-0 mt-0.5">
+                {actionLabel.icon}
+              </span>
+
+              <div className="flex-1 min-w-0 space-y-0.5">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span
+                    className="text-xs font-bold uppercase tracking-wide"
+                    style={{ color: actionLabel.color }}
+                  >
+                    {actionLabel.label}
+                  </span>
+
+                  {actionLabel.empire && (
+                    <span className="text-sm font-semibold">
+                      {actionLabel.empire}
+                    </span>
+                  )}
+
+                  {action.newEmpireName && (
+                    <span
+                      className="text-sm"
+                      style={{ color: 'var(--text2)' }}
+                    >
+                      → {action.newEmpireName}
+                    </span>
+                  )}
+                </div>
+
                 <p
                   className="text-xs"
                   style={{ color: 'var(--text2)' }}
                 >
-                  ID: s2 · Legacy game
+                  {action.details}
                 </p>
               </div>
 
-              <span
-                className="text-xs"
-                style={{ color: 'var(--text2)' }}
-              >
-                Reset only
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-    )}
-                      country: shuffled[i],
-                    }));
-                    setRandomAssignments(newAssignments);
-                  }}
-                >
-                  Randomize
-                </button>
-                {randomAssignments.length > 0 && (
-                  <button
-                    className="btn-primary text-sm"
-                    disabled={randomizing}
-                    onClick={async () => {
-                      setRandomizing(true);
-                      await fetch('/api/game/random-assign', {
-                        method: 'POST',
-                        headers: headers(),
-                        body: JSON.stringify({ assignments: randomAssignments, confirm: true }),
-                      });
-                      setRandomAssignments([]);
-                      loadAll();
-                      setRandomizing(false);
-                    }}
+              <div className="flex-shrink-0">
+                {isDone ? (
+                  <span
+                    className="text-xs"
+                    style={{ color: 'var(--success)' }}
                   >
-                    {randomizing ? 'Saving...' : 'Confirm Assignments'}
+                    ✓ Done
+                  </span>
+                ) : isError ? (
+                  <span
+                    className="text-xs"
+                    style={{ color: 'var(--danger)' }}
+                  >
+                    ✗ Failed
+                  </span>
+                ) : (
+                  <button
+                    className="btn-primary text-xs"
+                    style={{
+                      padding: '0.3rem 0.75rem',
+                      fontSize: '0.7rem',
+                      background:
+                        action.type === 'eliminate'
+                          ? 'var(--danger)'
+                          : undefined,
+                      borderColor:
+                        action.type === 'eliminate'
+                          ? 'var(--danger)'
+                          : undefined,
+                    }}
+                    disabled={isRunning}
+                    onClick={() => executeAlertAction(idx, action)}
+                  >
+                    {isRunning ? '…' : actionLabel.btnText}
                   </button>
                 )}
               </div>
-              {randomAssignments.length > 0 && (
-                <div className="space-y-1 max-h-48 overflow-y-auto">
-                  {randomAssignments.map((a, i) => (
-                    <div key={i} className="flex items-center gap-3 text-sm">
-                      <div className="w-2 h-2 rounded-full" style={{ background: a.color }} />
-                      <span className="flex-1">{a.empire}</span>
-                      <select
-                        className="input text-xs py-1"
-                        style={{ width: 160 }}
-                        value={a.country}
-                        onChange={e => {
-                          const updated = [...randomAssignments];
-                          updated[i] = { ...a, country: e.target.value };
-                          setRandomAssignments(updated);
-                        }}
-                      >
-                        {Object.keys(territories).map(c => <option key={c} value={c}>{c}</option>)}
-                      </select>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
+          );
+        })}
+      </div>
+    </div>
+  )}
 
-            {/* Create New Game */}
-            <div className="card space-y-3">
-              <p className="label">Create New Game Instance</p>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="label">Game Name</label>
-                  <input className="input text-sm" placeholder="e.g. Season 3" value={newGameName} onChange={e => setNewGameName(e.target.value)} />
-                </div>
-                <div>
-                  <label className="label">Start Year</label>
-                  <input className="input text-sm" type="number" value={newGameYear} onChange={e => setNewGameYear(Number(e.target.value))} />
-                </div>
-                <div>
-                  <label className="label">Content Mode</label>
-                  <select className="input text-sm" value={newGameContent} onChange={e => setNewGameContent(e.target.value as 'unrestricted' | 'school')}>
-                    <option value="unrestricted">Unrestricted</option>
-                    <option value="school">School-Appropriate</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="label">Setup Mode</label>
-                  <select className="input text-sm" value={newGameSetup} onChange={e => setNewGameSetup(e.target.value as 'bidding' | 'random')}>
-                    <option value="bidding">Bidding</option>
-                    <option value="random">Random Assignment</option>
-                  </select>
-                </div>
-              </div>
-              <button
-                className="btn-primary text-sm"
-                disabled={creatingGame || !newGameName}
-                onClick={async () => {
-                  setCreatingGame(true);
-                  const r = await fetch('/api/games', {
-                    method: 'POST',
-                    headers: headers(),
-                    body: JSON.stringify({ name: newGameName, startYear: newGameYear, contentMode: newGameContent, setupMode: newGameSetup }),
-                  });
-                  const d = await r.json();
-                  if (r.ok) {
-                    alert(`Game created! ID: ${d.id}\nShare link: ${window.location.origin}/login?game=${d.id}`);
-                    setNewGameName('');
-                  } else {
-                    alert(`Failed: ${d.error}`);
-                  }
-                  setCreatingGame(false);
-                }}
-              >
-                {creatingGame ? 'Creating...' : 'Create Game'}
-              </button>
-            </div>
+  {!alertsRunning &&
+    !alertsExtracting &&
+    alertsActions.length === 0 &&
+    alertsText && (
+      <p
+        className="text-xs"
+        style={{ color: 'var(--success)' }}
+      >
+        ✓ No actionable items detected this turn.
+      </p>
+    )}
+</div>
+
+{/* Random Assignment */}
+<div className="card space-y-3">
+  <p className="label">Random Territory Assignment</p>
+
+  <p className="text-xs" style={{ color: 'var(--text2)' }}>
+    Assign one territory to each active player randomly. Select countries
+    to include in the pool.
+  </p>
+
+  <div className="flex gap-3 flex-wrap">
+    <button
+      className="btn-ghost text-sm"
+      onClick={() => {
+        const pool =
+          randomPool.length > 0
+            ? randomPool
+            : Object.keys(territories);
+
+        const shuffled = [...pool].sort(
+          () => Math.random() - 0.5
+        );
+
+        const newAssignments = activePlayers
+          .slice(0, shuffled.length)
+          .map((p, i) => ({
+            playerName: p.name,
+            empire: p.empire,
+            color: p.color,
+            country: shuffled[i],
+          }));
+
+        setRandomAssignments(newAssignments);
+      }}
+    >
+      Randomize
+    </button>
+
+    {randomAssignments.length > 0 && (
+      <button
+        className="btn-primary text-sm"
+        disabled={randomizing}
+        onClick={async () => {
+          setRandomizing(true);
+
+          await fetch('/api/game/random-assign', {
+            method: 'POST',
+            headers: headers(),
+            body: JSON.stringify({
+              assignments: randomAssignments,
+              confirm: true,
+            }),
+          });
+
+          setRandomAssignments([]);
+          loadAll();
+          setRandomizing(false);
+        }}
+      >
+        {randomizing ? 'Saving...' : 'Confirm Assignments'}
+      </button>
+    )}
+  </div>
+
+  {randomAssignments.length > 0 && (
+    <div className="space-y-1 max-h-48 overflow-y-auto">
+      {randomAssignments.map((a, i) => (
+        <div
+          key={i}
+          className="flex items-center gap-3 text-sm"
+        >
+          <div
+            className="w-2 h-2 rounded-full"
+            style={{ background: a.color }}
+          />
+
+          <span className="flex-1">{a.empire}</span>
+
+          <select
+            className="input text-xs py-1"
+            style={{ width: 160 }}
+            value={a.country}
+            onChange={e => {
+              const updated = [...randomAssignments];
+              updated[i] = {
+                ...a,
+                country: e.target.value,
+              };
+              setRandomAssignments(updated);
+            }}
+          >
+            {Object.keys(territories).map(c => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </div>
+      ))}
+    </div>
+  )}
+</div>
+
+{/* Create New Game */}
+<div className="card space-y-3">
+  <p className="label">Create New Game Instance</p>
+
+  <div className="grid grid-cols-2 gap-3">
+    <div>
+      <label className="label">Game Name</label>
+      <input
+        className="input text-sm"
+        placeholder="e.g. Season 3"
+        value={newGameName}
+        onChange={e => setNewGameName(e.target.value)}
+      />
+    </div>
+
+    <div>
+      <label className="label">Start Year</label>
+      <input
+        className="input text-sm"
+        type="number"
+        value={newGameYear}
+        onChange={e => setNewGameYear(Number(e.target.value))}
+      />
+    </div>
+
+    <div>
+      <label className="label">Content Mode</label>
+      <select
+        className="input text-sm"
+        value={newGameContent}
+        onChange={e =>
+          setNewGameContent(
+            e.target.value as 'unrestricted' | 'school'
+          )
+        }
+      >
+        <option value="unrestricted">Unrestricted</option>
+        <option value="school">School-Appropriate</option>
+      </select>
+    </div>
+
+    <div>
+      <label className="label">Setup Mode</label>
+      <select
+        className="input text-sm"
+        value={newGameSetup}
+        onChange={e =>
+          setNewGameSetup(
+            e.target.value as 'bidding' | 'random'
+          )
+        }
+      >
+        <option value="bidding">Bidding</option>
+        <option value="random">Random Assignment</option>
+      </select>
+    </div>
+  </div>
+
+  <button
+    className="btn-primary text-sm"
+    disabled={creatingGame || !newGameName}
+    onClick={async () => {
+      setCreatingGame(true);
+
+      const r = await fetch('/api/games', {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({
+          name: newGameName,
+          startYear: newGameYear,
+          contentMode: newGameContent,
+          setupMode: newGameSetup,
+        }),
+      });
+
+      const d = await r.json();
+
+      if (r.ok) {
+        setNewGameName('');
+
+        const listR = await fetch('/api/games', {
+          headers: headers(),
+        });
+
+        if (listR.ok) {
+          const listData = await listR.json();
+          setGamesList(listData.games ?? []);
+        }
+
+        alert(
+          `Game created! ID: ${d.id}\nShare link: ${window.location.origin}/login?game=${d.id}`
+        );
+      } else {
+        alert(`Failed: ${d.error}`);
+      }
+
+      setCreatingGame(false);
+    }}
+  >
+    {creatingGame ? 'Creating...' : 'Create Game'}
+  </button>
+</div>
+
+{/* Manage Existing Games */}
+<div className="card space-y-4">
+  <p className="label">Manage Existing Games</p>
+
+  <p
+    className="text-xs"
+    style={{ color: 'var(--text2)' }}
+  >
+    Rename games or permanently delete games you no longer need.
+  </p>
+
+  <div className="space-y-2">
+    {gamesList
+      .filter(g => g.id !== 's2')
+      .map(g => (
+        <div
+          key={g.id}
+          className="flex items-center gap-3 p-3 rounded"
+          style={{
+            background: 'var(--surface2)',
+            border: '1px solid var(--border)',
+          }}
+        >
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold truncate">
+              {g.name}
+            </p>
+
+            <p
+              className="text-xs"
+              style={{ color: 'var(--text2)' }}
+            >
+              ID: {g.id}
+            </p>
           </div>
-        )}
 
+          <button
+            className="btn-ghost text-xs"
+            onClick={() => renameGame(g.id, g.name)}
+          >
+            ✏ Rename
+          </button>
+
+          <button
+            className="btn-danger text-xs"
+            onClick={() => deleteGame(g.id, g.name)}
+          >
+            🗑 Delete
+          </button>
+        </div>
+      ))}
+
+    {gamesList.filter(g => g.id !== 's2').length === 0 && (
+      <p
+        className="text-xs"
+        style={{ color: 'var(--text2)' }}
+      >
+        No additional game instances exist yet.
+      </p>
+    )}
+
+    <div
+      className="flex items-center gap-3 p-3 rounded"
+      style={{
+        background: 'var(--surface2)',
+        border: '1px solid var(--border)',
+      }}
+    >
+      <div className="flex-1">
+        <p className="font-semibold">
+          S2 — Current Game
+        </p>
+
+        <p
+          className="text-xs"
+          style={{ color: 'var(--text2)' }}
+        >
+          ID: s2 · Legacy game
+        </p>
+      </div>
+
+      <span
+        className="text-xs"
+        style={{ color: 'var(--text2)' }}
+      >
+        Reset only
+      </span>
+    </div>
+  </div>
+</div>
         {/* ACTIONS */}
         {tab === 'actions' && (
           <div className="space-y-4">
