@@ -865,65 +865,82 @@ export default function GMPage() {
     );
   }
 
-  async function deleteGame(
-    gameId: string,
-    gameName: string
-  ) {
-    if (gameId === 's2') {
-      alert(
-        'S2 is the legacy game and cannot be permanently deleted from this screen. Use Full Game Reset for S2.'
-      );
-      return;
-    }
-
-    const confirmed = window.confirm(
-      `PERMANENTLY DELETE "${gameName}"?\n\n` +
-      `This will permanently delete ALL data belonging to this game, including players, turns, Perfect Knowledge, advisors, stats, maps, chats, bidding, and everything else.\n\n` +
-      `THIS CANNOT BE UNDONE.\n\n` +
-      `Click OK only if you are absolutely sure.`
+async function deleteGame(
+  gameId: string,
+  gameName: string
+) {
+  if (gameId === 's2') {
+    alert(
+      'S2 is the legacy game and cannot be permanently deleted from this screen. Use Full Game Reset for S2.'
     );
-
-    if (!confirmed) return;
-
-    const r = await fetch('/api/games', {
-      method: 'DELETE',
-      headers: headers(),
-      body: JSON.stringify({
-        id: gameId,
-        confirm: 'DELETE',
-      }),
-    });
-
-    const d = await r.json();
-
-    if (!r.ok) {
-      alert(`Failed to delete game: ${d.error ?? 'Unknown error'}`);
-      return;
-    }
-
-    setGamesList(prev =>
-      prev.filter(g => g.id !== gameId)
-    );
-
-    if (currentGameId === gameId) {
-      document.cookie =
-        'empires-game=s2; path=/; max-age=31536000; samesite=lax';
-
-      setCurrentGameId('s2');
-    }
-
-    setPlayers([]);
-    setTerritories({});
-    setActions({});
-    setArchive([]);
-    setWarChest(null);
-    setGmStatsData(null);
-    setGmStatsEmpire('');
-    setGmStatsError('');
-    setGmStatsYear('');
-
-    alert(`"${gameName}" has been permanently deleted.`);
+    return;
   }
+
+  // FIRST CONFIRMATION
+  const confirmed = window.confirm(
+    `PERMANENTLY DELETE "${gameName}"?\n\n` +
+    `This will permanently delete ALL data belonging to this game, including players, turns, Perfect Knowledge, advisors, stats, maps, chats, bidding, and everything else.\n\n` +
+    `THIS CANNOT BE UNDONE.\n\n` +
+    `Click OK to continue or Cancel to keep the game.`
+  );
+
+  // HARD STOP: Cancel means DO NOT continue.
+  if (confirmed !== true) {
+    return;
+  }
+
+  // SECOND CONFIRMATION
+  const finalConfirmation = window.prompt(
+    `FINAL SAFETY CHECK\n\n` +
+    `To permanently delete "${gameName}", type DELETE exactly.\n\n` +
+    `Click Cancel to keep the game.`
+  );
+
+  // HARD STOP: anything other than exactly DELETE means DO NOT continue.
+  if (finalConfirmation !== 'DELETE') {
+    return;
+  }
+
+  // ONLY AFTER BOTH CONFIRMATIONS ARE ACCEPTED DO WE SEND THE DELETE REQUEST.
+  const r = await fetch('/api/games', {
+    method: 'DELETE',
+    headers: headers(),
+    body: JSON.stringify({
+      id: gameId,
+      confirm: 'DELETE',
+    }),
+  });
+
+  const d = await r.json();
+
+  if (!r.ok) {
+    alert(`Failed to delete game: ${d.error ?? 'Unknown error'}`);
+    return;
+  }
+
+  setGamesList(prev =>
+    prev.filter(g => g.id !== gameId)
+  );
+
+  if (currentGameId === gameId) {
+    document.cookie =
+      'empires-game=s2; path=/; max-age=31536000; samesite=lax';
+
+    setCurrentGameId('s2');
+  }
+
+  setPlayers([]);
+  setTerritories({});
+  setActions({});
+  setArchive([]);
+  setWarChest(null);
+  setGmStatsData(null);
+  setGmStatsEmpire('');
+  setGmStatsError('');
+  setGmStatsYear('');
+
+  alert(`"${gameName}" has been permanently deleted.`);
+}
 
   async function addPlayerManually() {
     if (!addPlayerName.trim() || !addPlayerEmpire.trim() || !addPlayerPassword.trim()) {
@@ -2041,11 +2058,13 @@ async function runAlerts(targetYear: number) {
           </button>
 
           <button
-            className="btn-danger text-xs"
-            onClick={() => deleteGame(g.id, g.name)}
-          >
-            🗑 Delete
-          </button>
+   <button
+  type="button"
+  className="btn-danger text-xs"
+  onClick={() => deleteGame(g.id, g.name)}
+>
+  🗑 Delete
+</button>
         </div>
       ))}
 
