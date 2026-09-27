@@ -2058,7 +2058,7 @@ async function runAlerts(targetYear: number) {
           </button>
 
           <button
-   <button
+<button
   type="button"
   className="btn-danger text-xs"
   onClick={() => deleteGame(g.id, g.name)}
