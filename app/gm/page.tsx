@@ -824,9 +824,6 @@ export default function GMPage() {
     setGmStatsLoading(false);
   }
 
-  async function loadGmStats() {
-    // ...existing loadGmStats code...
-  }
 
   async function renameGame(gameId: string, currentName: string) {
     const newName = window.prompt(
