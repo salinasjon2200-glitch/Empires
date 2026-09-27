@@ -2087,6 +2087,9 @@ async function runAlerts(targetYear: number) {
     </div>
   </div>
 </div>
+        </div>
+        )}
+        
         {/* ACTIONS */}
         {tab === 'actions' && (
           <div className="space-y-4">
