@@ -1698,11 +1698,13 @@ async function runAlerts(targetYear: number) {
 
               const d = await r.json();
 
-              if (r.ok) {
+                          if (r.ok) {
+                setGamesList(prev => [...prev, d.instance]);
+                setNewGameName('');
+
                 alert(
                   `Game created! ID: ${d.id}\nShare link: ${window.location.origin}/login?game=${d.id}`
                 );
-                setNewGameName('');
               } else {
                 alert(`Failed: ${d.error}`);
               }
