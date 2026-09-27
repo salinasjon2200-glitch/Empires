@@ -164,8 +164,13 @@ export async function DELETE(req: NextRequest) {
 
   try {
     gameKeys = await dbKeys(`${id}:*`);
-  } catch {
-    gameKeys = [];
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error: 'Could not safely inspect the game data. The game was NOT deleted.',
+      },
+      { status: 500 }
+    );
   }
 
   // Sessions are stored separately from the game namespace.
