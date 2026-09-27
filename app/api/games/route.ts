@@ -194,12 +194,12 @@ export async function DELETE(req: NextRequest) {
     sessionKeys = [];
   }
 
-  const keysToDelete = [
-    ...new Set([
-      ...gameKeys,
-      ...sessionKeys,
-    ]),
-  ];
+const keysToDelete = Array.from(
+  new Set([
+    ...gameKeys,
+    ...sessionKeys,
+  ])
+);
 
   await Promise.all(
     keysToDelete.map(key => dbDel(key).catch(() => {}))
